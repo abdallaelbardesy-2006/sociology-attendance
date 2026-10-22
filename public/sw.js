@@ -1,4 +1,4 @@
-const CACHE_NAME = 'soc-attendance-v7-multipage';
+const CACHE_NAME = 'soc-attendance-v8-rbac';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

@@ -83,15 +83,15 @@
     
     <form id="loginForm" onsubmit="event.preventDefault(); handleLogin();">
       <div class="mb-3 text-start">
-        <label class="form-label small fw-bold text-secondary">البريد الإلكتروني المصرح</label>
+        <label class="form-label small fw-bold text-secondary">البريد الإلكتروني (المشرف / الدكتور / ليدر الدفعة)</label>
         <div class="input-group">
           <span class="input-group-text bg-light border-end-0 rounded-start-4"><i class="fas fa-envelope text-muted"></i></span>
-          <input type="email" id="loginEmail" class="form-control border-start-0 text-center" placeholder="name@domain.com" required autofocus value="abdalla.elbardesy1@gmail.com">
+          <input type="email" id="loginEmail" class="form-control border-start-0 text-center" placeholder="name@domain.com" required autofocus>
         </div>
       </div>
       
       <div class="mb-4 text-start">
-        <label class="form-label small fw-bold text-secondary">المفتاح السري للوحة التحكم</label>
+        <label class="form-label small fw-bold text-secondary">كلمة المرور / المفتاح السري</label>
         <div class="input-group">
           <span class="input-group-text bg-light border-end-0 rounded-start-4"><i class="fas fa-key text-muted"></i></span>
           <input type="password" id="loginKey" class="form-control border-start-0 text-center" placeholder="••••••••••••" required>
@@ -149,8 +149,10 @@
         if (data.valid) {
           const userObj = {
             email: data.email,
+            name: data.name || data.email,
             role: data.role || 'super_admin',
-            warning: data.warning || '',
+            assignedSubject: data.assignedSubject || 'الكل',
+            assignedGrade: data.assignedGrade || 'الكل',
             ts: Date.now()
           };
           sessionStorage.setItem('soc_admin_user', JSON.stringify(userObj));

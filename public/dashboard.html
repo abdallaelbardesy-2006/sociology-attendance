@@ -6,7 +6,7 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>لوحة التحكم وسكانر الحضور (PWA) - قسم علم الاجتماع</title>
+  <title>لوحة التحكم ورصد الحضور - قسم علم الاجتماع</title>
   
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#1a237e">
@@ -17,63 +17,66 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <script src="https://unpkg.com/html5-qrcode"></script>
 
   <style>
     * { font-family: 'Cairo', sans-serif; box-sizing: border-box; }
-    body { background: #f1f5f9; min-height: 100vh; padding-bottom: 70px; color: #1e293b; margin: 0; }
+    body { background-color: #f1f5f9; min-height: 100vh; margin: 0; padding-bottom: 50px; }
 
     .top-header {
       background: linear-gradient(135deg, #0d47a1, #1a237e);
-      color: white;
+      color: #ffffff;
       padding: 16px 24px;
-      box-shadow: 0 4px 15px rgba(13, 71, 161, 0.2);
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
     }
-
+    
     .nav-tabs .nav-link {
       font-weight: 700;
       color: #64748b;
       border: none;
       padding: 12px 18px;
       border-radius: 12px;
-      margin-left: 6px;
+      margin-left: 8px;
       transition: all 0.2s ease;
     }
+    .nav-tabs .nav-link:hover { color: #1a237e; background: #e2e8f0; }
     .nav-tabs .nav-link.active {
-      color: #1a237e;
-      background: #e0e7ff;
+      background: #1a237e !important;
+      color: #ffffff !important;
+      box-shadow: 0 4px 12px rgba(26, 35, 126, 0.25);
     }
 
     .main-card {
       background: #ffffff;
       border-radius: 20px;
-      padding: 26px;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+      padding: 24px;
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.05);
       border: 1px solid #e2e8f0;
       margin-bottom: 24px;
     }
 
     .stat-card {
       border-radius: 18px;
-      padding: 22px 20px;
+      padding: 20px;
       color: white;
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+      text-align: center;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.08);
       position: relative;
       overflow: hidden;
     }
-    .stat-card .val { font-size: 2.2rem; font-weight: 900; line-height: 1.1; }
-    .stat-card .lbl { font-size: 0.9rem; opacity: 0.85; font-weight: 600; margin-top: 5px; }
+    .stat-card .val { font-size: 2rem; font-weight: 900; line-height: 1.1; margin-bottom: 6px; }
+    .stat-card .lbl { font-size: 0.85rem; font-weight: 600; opacity: 0.9; }
 
     .subj-pill {
-      cursor: pointer;
-      border: 2px solid #e2e8f0;
+      border: 1.5px solid #cbd5e1;
       border-radius: 16px;
       padding: 14px;
       text-align: center;
       transition: all 0.25s ease;
       background: #ffffff;
       height: 100%;
+      cursor: pointer;
       display: flex;
       flex-direction: column;
       justify-content: center;
@@ -81,12 +84,12 @@
     .subj-pill:hover {
       border-color: #1a237e;
       transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(26, 35, 126, 0.1);
+      box-shadow: 0 4px 12px rgba(26, 35, 126, 0.12);
     }
     .subj-pill.active {
       border-color: #1a237e;
       background: #eef2ff;
-      box-shadow: 0 0 0 3px rgba(26, 35, 126, 0.15);
+      box-shadow: 0 0 0 3px rgba(26, 35, 126, 0.2);
     }
 
     #reader {
@@ -111,19 +114,34 @@
     .badge-high { background: #dcfce7; color: #15803d; font-weight: 700; padding: 6px 12px; border-radius: 50px; }
     .badge-mid { background: #fef9c3; color: #a16207; font-weight: 700; padding: 6px 12px; border-radius: 50px; }
     .badge-low { background: #fee2e2; color: #b91c1c; font-weight: 700; padding: 6px 12px; border-radius: 50px; }
+
+    .doctor-banner {
+      background: linear-gradient(135deg, #0284c7, #0369a1);
+      color: white;
+      border-radius: 16px;
+      padding: 18px 24px;
+      margin-bottom: 20px;
+    }
+    .leader-banner {
+      background: linear-gradient(135deg, #059669, #047857);
+      color: white;
+      border-radius: 16px;
+      padding: 18px 24px;
+      margin-bottom: 20px;
+    }
   </style>
 </head>
 <body>
 
   <!-- شريط العنوان العلوي -->
-  <div class="top-header d-flex justify-content-between align-items-center">
+  <div class="top-header d-flex justify-content-between align-items-center flex-wrap gap-2">
     <div>
       <h5 class="mb-0 fw-bold"><i class="fas fa-graduation-cap me-2"></i> قسم علم الاجتماع • جامعة عين شمس</h5>
-      <span class="small opacity-75">لوحة التحكم ورصد الحضور الذكي بالـ QR Code (اللائحة الجديدة)</span>
+      <span class="small opacity-75">منظومة رصد الحضور الذكي بالـ QR Code (اللائحة الجديدة)</span>
     </div>
     <div class="d-flex align-items-center gap-2">
-      <span class="badge bg-light text-primary px-3 py-2 fw-bold" id="adminBadge">جاري التحميل...</span>
-      <button class="btn btn-outline-light btn-sm px-2" onclick="handleLogout()" title="تسجيل الخروج">
+      <span id="roleBadgeContainer"></span>
+      <button class="btn btn-outline-light btn-sm px-3 fw-bold" onclick="handleLogout()" title="تسجيل الخروج">
         <i class="fas fa-power-off me-1"></i> خروج
       </button>
     </div>
@@ -131,25 +149,59 @@
 
   <div class="container my-4">
     
-    <!-- التبويبات الرئيسية -->
+    <!-- التبويبات الرئيسية (ديناميكية حسب الدور) -->
     <ul class="nav nav-tabs mb-4 border-0" id="mainTabList">
-      <li class="nav-item">
-        <button class="nav-link active" onclick="switchSection('scannerSection')"><i class="fas fa-camera me-1"></i> ماسح الحضور (Scanner)</button>
+      <li class="nav-item" id="navItemScanner">
+        <button class="nav-link active" onclick="switchSection('scannerSection')">
+          <i class="fas fa-camera me-1"></i> ماسح الحضور (Scanner)
+        </button>
       </li>
-      <li class="nav-item">
-        <button class="nav-link" onclick="switchSection('studentsSection')"><i class="fas fa-users-gear me-1"></i> إدارة وتعديل الطلاب</button>
+      <li class="nav-item" id="navItemStudents">
+        <button class="nav-link" onclick="switchSection('studentsSection')">
+          <i class="fas fa-users-gear me-1"></i> إدارة وتعديل الطلاب
+        </button>
       </li>
-      <li class="nav-item">
-        <button class="nav-link" onclick="switchSection('analyticsSection')"><i class="fas fa-chart-line me-1"></i> الإحصائيات والنسب</button>
+      <li class="nav-item" id="navItemAnalytics">
+        <button class="nav-link" id="navLinkAnalytics" onclick="switchSection('analyticsSection')">
+          <i class="fas fa-chart-line me-1"></i> الإحصائيات والنسب
+        </button>
       </li>
-      <li class="nav-item">
-        <button class="nav-link" onclick="switchSection('promotionSection')"><i class="fas fa-arrow-up-right-dots me-1"></i> ترقية الفرق الدراسية</button>
+      <li class="nav-item" id="navItemPromotion">
+        <button class="nav-link" onclick="switchSection('promotionSection')">
+          <i class="fas fa-arrow-up-right-dots me-1"></i> ترقية الفرق الدراسية
+        </button>
+      </li>
+      <li class="nav-item" id="navItemAdmins" style="display:none;">
+        <button class="nav-link" onclick="switchSection('adminsSection')">
+          <i class="fas fa-user-shield me-1"></i> إدارة المشرفين والصلاحيات
+        </button>
       </li>
     </ul>
 
     <!-- ==================== 1. ماسح الحضور ==================== -->
     <div id="scannerSection" class="section-pane">
-      <div class="main-card">
+      
+      <!-- كارت خاص بالدكتور لتشغيل مادته فوراً -->
+      <div id="doctorQuickBox" class="doctor-banner d-flex justify-content-between align-items-center flex-wrap gap-2" style="display:none;">
+        <div>
+          <h5 class="fw-bold mb-1"><i class="fas fa-chalkboard-user me-2"></i> المحاضرة المخصصة لك: <span id="docSubjTitle"></span></h5>
+          <span class="small opacity-90"><i class="fas fa-info-circle me-1"></i> تم تقييد الماسح على مادتك وفرقتك المعتمدة تلقائياً.</span>
+        </div>
+        <button class="btn btn-light text-primary fw-bold px-4 py-2" onclick="activateDoctorSubject()">
+          <i class="fas fa-play me-1"></i> بدء فتح الكاميرا ورصد المحاضرة
+        </button>
+      </div>
+
+      <!-- كارت خاص بليدر الدفعة -->
+      <div id="leaderQuickBox" class="leader-banner d-flex justify-content-between align-items-center flex-wrap gap-2" style="display:none;">
+        <div>
+          <h5 class="fw-bold mb-1"><i class="fas fa-qrcode me-2"></i> وضع مسجل الحضور (ليدر الدفعة)</h5>
+          <span class="small opacity-90">اختر المادة والمحاضرة وابدأ مسح كروت الطلاب فوراً.</span>
+        </div>
+      </div>
+
+      <!-- محدد المادة (يظهر للجميع ويمكن تخصيصه) -->
+      <div class="main-card" id="selectionCard">
         <h5 class="fw-bold text-primary mb-3"><i class="fas fa-filter me-2"></i> تحديد المحاضرة طبقاً للائحة الجديدة</h5>
         
         <div class="row g-3">
@@ -174,11 +226,15 @@
         </div>
 
         <div id="subjectsBox" class="mt-4" style="display:none;">
-          <label class="form-label fw-bold text-primary mb-2">الخطوة الثالثة: اختر المادة لتشغيل الكاميرا ورصد الحضور</label>
+          <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+            <label class="form-label fw-bold text-primary mb-0">الخطوة الثالثة: اختر المادة لتشغيل الكاميرا ورصد الحضور</label>
+            <input type="text" id="quickSubjSearch" class="form-control form-control-sm w-auto" placeholder="تصفية سريعة للمواد..." onkeyup="filterSubjectsGrid()">
+          </div>
           <div class="row g-3" id="subjectsGrid"></div>
         </div>
       </div>
 
+      <!-- نافذة الكاميرا والماسح -->
       <div class="main-card text-center" id="cameraBox" style="display:none;">
         <div class="d-flex justify-content-between align-items-center mb-3">
           <h5 class="fw-bold text-success mb-0" id="activeSubjLabel">المحاضرة الحالية</h5>
@@ -231,84 +287,134 @@
       </div>
     </div>
 
-    <!-- ==================== 3. الإحصائيات الشاملة ==================== -->
+    <!-- ==================== 3. الإحصائيات الشاملة والتقارير ==================== -->
     <div id="analyticsSection" class="section-pane" style="display:none;">
       
+      <!-- بانر خاص بالدكتور في شاشة الإحصائيات -->
+      <div id="docAnalyticsBanner" class="doctor-banner d-flex justify-content-between align-items-center flex-wrap gap-2" style="display:none;">
+        <div>
+          <h5 class="fw-bold mb-1"><i class="fas fa-chart-pie me-2"></i> إحصائيات حضور مادتك فقط: <span id="docStatSubjTitle"></span></h5>
+          <span class="small opacity-90">تعرض هذه الصفحة نسب الحضور وسجلات الطلاب الحاضرين في مادتك فقط.</span>
+        </div>
+        <button class="btn btn-light text-primary fw-bold" onclick="exportDoctorAttendanceCSV()">
+          <i class="fas fa-file-excel me-1 text-success"></i> تصدير كشف الحضور (Excel / CSV)
+        </button>
+      </div>
+
+      <!-- فلاتر خاصة بالسوبر أدمن فقط -->
+      <div class="main-card py-3" id="superAdminAnalyticsFilters">
+        <div class="row g-2 align-items-center">
+          <div class="col-md-3">
+            <label class="form-label small fw-bold text-muted mb-1">تصفية حسب الفرقة:</label>
+            <select id="anFilterGrade" class="form-select form-select-sm" onchange="fetchAnalyticsData()">
+              <option value="الكل">كل الفرق الدراسية</option>
+              <option value="الفرقة الأولى">الفرقة الأولى</option>
+              <option value="الفرقة الثانية">الفرقة الثانية</option>
+              <option value="الفرقة الثالثة">الفرقة الثالثة</option>
+              <option value="الفرقة الرابعة">الفرقة الرابعة</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small fw-bold text-muted mb-1">تصفية حسب الترم:</label>
+            <select id="anFilterTerm" class="form-select form-select-sm" onchange="fetchAnalyticsData()">
+              <option value="الكل">كافة الترمات</option>
+              <option value="ترم أول">ترم أول</option>
+              <option value="ترم ثاني">ترم ثاني</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small fw-bold text-muted mb-1">تصفية حسب المادة:</label>
+            <select id="anFilterSubject" class="form-select form-select-sm" onchange="fetchAnalyticsData()">
+              <option value="الكل">جميع المواد (78 مادة)</option>
+            </select>
+          </div>
+          <div class="col-md-2 d-flex align-items-end">
+            <button class="btn btn-primary btn-sm w-100 fw-bold" onclick="fetchAnalyticsData()">
+              <i class="fas fa-rotate me-1"></i> تحديث الإحصائيات
+            </button>
+          </div>
+        </div>
+      </div>
+
       <!-- كروت الإحصاء العامة -->
       <div class="row g-3 mb-4">
         <div class="col-md-3 col-6">
           <div class="stat-card" style="background: linear-gradient(135deg, #1e3a8a, #3b82f6);">
             <div class="val" id="stTotalStudents">0</div>
-            <div class="lbl">إجمالي الطلاب المسجلين</div>
+            <div class="lbl">إجمالي الطلاب في النطاق</div>
           </div>
         </div>
         <div class="col-md-3 col-6">
           <div class="stat-card" style="background: linear-gradient(135deg, #065f46, #10b981);">
             <div class="val" id="stYearAttRate">0%</div>
-            <div class="lbl">نسبة حضور العام الدراسي ككل</div>
+            <div class="lbl">متوسط نسبة الحضور</div>
           </div>
         </div>
         <div class="col-md-3 col-6">
           <div class="stat-card" style="background: linear-gradient(135deg, #991b1b, #ef4444);">
             <div class="val" id="stYearAbsRate">0%</div>
-            <div class="lbl">نسبة غياب العام الدراسي ككل</div>
+            <div class="lbl">متوسط نسبة الغياب</div>
           </div>
         </div>
         <div class="col-md-3 col-6">
           <div class="stat-card" style="background: linear-gradient(135deg, #374151, #4b5563);">
             <div class="val" id="stTotalLogs">0</div>
-            <div class="lbl">إجمالي تسجيلات المحاضرات</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- نسب الترم الأول والثاني -->
-      <div class="row g-3 mb-4">
-        <div class="col-md-6">
-          <div class="main-card py-3">
-            <h6 class="fw-bold text-primary mb-2"><i class="fas fa-calendar-day me-1"></i> إحصائية الترم الأول</h6>
-            <div class="d-flex justify-content-between align-items-center">
-              <span>نسبة الحضور: <strong class="text-success" id="term1Att">0%</strong></span>
-              <span>نسبة الغياب: <strong class="text-danger" id="term1Abs">0%</strong></span>
-              <span>إجمالي الحضور: <strong id="term1Count">0</strong></span>
-            </div>
-          </div>
-        </div>
-        <div class="col-md-6">
-          <div class="main-card py-3">
-            <h6 class="fw-bold text-primary mb-2"><i class="fas fa-calendar-day me-1"></i> إحصائية الترم الثاني</h6>
-            <div class="d-flex justify-content-between align-items-center">
-              <span>نسبة الحضور: <strong class="text-success" id="term2Att">0%</strong></span>
-              <span>نسبة الغياب: <strong class="text-danger" id="term2Abs">0%</strong></span>
-              <span>إجمالي الحضور: <strong id="term2Count">0</strong></span>
-            </div>
+            <div class="lbl">إجمالي رصد المحاضرات</div>
           </div>
         </div>
       </div>
 
       <!-- جداول المواد والطلاب -->
-      <div class="row g-4">
-        <div class="col-md-6">
-          <div class="main-card">
+      <div class="row g-4 mb-4">
+        <div class="col-md-6" id="subjsAnalyticsCol">
+          <div class="main-card h-100">
             <h6 class="fw-bold text-primary mb-3"><i class="fas fa-book me-1"></i> نسب حضور وغياب المواد</h6>
-            <div class="table-responsive" style="max-height: 420px; overflow-y: auto;">
+            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
               <table class="table table-sm align-middle">
-                <thead class="table-light"><tr><th>كود</th><th>المادة</th><th>محاضرات</th><th>نسبة الحضور</th><th>نسبة الغياب</th></tr></thead>
+                <thead class="table-light"><tr><th>كود</th><th>المادة</th><th>تسجيلات</th><th>حضور</th><th>غياب</th></tr></thead>
                 <tbody id="analyticsSubjsTbody"></tbody>
               </table>
             </div>
           </div>
         </div>
-        <div class="col-md-6">
-          <div class="main-card">
-            <h6 class="fw-bold text-primary mb-3"><i class="fas fa-user-check me-1"></i> نسب حضور وغياب كل طالب</h6>
-            <div class="table-responsive" style="max-height: 420px; overflow-y: auto;">
+        <div class="col-md-6" id="stdsAnalyticsCol">
+          <div class="main-card h-100">
+            <h6 class="fw-bold text-primary mb-3"><i class="fas fa-user-check me-1"></i> إحصائيات حضور كل طالب</h6>
+            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
               <table class="table table-sm align-middle">
-                <thead class="table-light"><tr><th>الاسم</th><th>الفرقة</th><th>محاضرات</th><th>حضور</th><th>غياب</th></tr></thead>
+                <thead class="table-light"><tr><th>الاسم</th><th>الفرقة</th><th>تسجيلات</th><th>نسبة الحضور</th></tr></thead>
                 <tbody id="analyticsStdsTbody"></tbody>
               </table>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- جدول تفصيلي بسجلات الحضور الأخيرة مع زر تصدير -->
+      <div class="main-card">
+        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+          <h6 class="fw-bold text-primary mb-0"><i class="fas fa-list-check me-2"></i> سجلات الحضور التفصيلية المسجلة في الشيت</h6>
+          <button class="btn btn-sm btn-outline-success fw-bold" onclick="exportRecordsToCSV()">
+            <i class="fas fa-file-excel me-1"></i> تصدير السجلات الظاهرة كملف Excel (CSV)
+          </button>
+        </div>
+        <div class="table-responsive" style="max-height: 450px; overflow-y: auto;">
+          <table class="table table-sm table-hover align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>التاريخ</th>
+                <th>الساعة</th>
+                <th>اسم الطالب</th>
+                <th>كود الطالب</th>
+                <th>الفرقة</th>
+                <th>الترم</th>
+                <th>المادة</th>
+                <th>الحالة</th>
+                <th>المسجل</th>
+              </tr>
+            </thead>
+            <tbody id="recentRecordsTbody"></tbody>
+          </table>
         </div>
       </div>
 
@@ -358,41 +464,53 @@
       </div>
     </div>
 
+    <!-- ==================== 5. إدارة المشرفين والصلاحيات (سوبر أدمن فقط) ==================== -->
+    <div id="adminsSection" class="section-pane" style="display:none;">
+      <div class="main-card">
+        <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+          <div>
+            <h5 class="fw-bold text-primary mb-1"><i class="fas fa-user-shield me-2"></i> إدارة الدكاترة، ليدرز الدفع، والمشرفين</h5>
+            <span class="small text-muted">تحديد الصلاحيات والمواد المصرح بها لكل دكتور وليدر في شيت Google المباشر</span>
+          </div>
+          <div class="d-flex gap-2">
+            <button class="btn btn-primary fw-bold" onclick="openAddDoctorModal()">
+              <i class="fas fa-plus-circle me-1"></i> إضافة دكتور مادة
+            </button>
+            <button class="btn btn-success fw-bold" onclick="openAddLeaderModal()">
+              <i class="fas fa-user-plus me-1"></i> إضافة ليدر دفعة
+            </button>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-hover align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>الاسم</th>
+                <th>البريد الإلكتروني</th>
+                <th>كلمة المرور</th>
+                <th>الدور / الصلاحية</th>
+                <th>المادة المصرحة</th>
+                <th>الفرقة المصرحة</th>
+                <th>الحالة</th>
+                <th>إجراءات</th>
+              </tr>
+            </thead>
+            <tbody id="adminsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
   </div>
 
 <script>
-  // التحقق من صلاحية الجلسة قبل كل شيء
-  let adminEmail = '';
-  try {
-    const raw = sessionStorage.getItem('soc_admin_user') || localStorage.getItem('soc_admin_user');
-    if (!raw) {
-      window.location.href = '/admin';
-    } else {
-      const userObj = JSON.parse(raw);
-      adminEmail = userObj.email || 'abdalla.elbardesy1@gmail.com';
-      document.getElementById('adminBadge').innerText = adminEmail;
-    }
-  } catch(e) {
-    window.location.href = '/admin';
-  }
-
-  function handleLogout() {
-    sessionStorage.removeItem('soc_admin_user');
-    localStorage.removeItem('soc_admin_user');
-    window.location.href = '/admin';
-  }
-
-  // تسجيل وتحديث الـ Service Worker
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').then(reg => {
-      reg.update();
-    }).catch(console.error);
-  }
-
+  let currentUser = null;
   let activeSubject = null;
   let scannerInstance = null;
+  let globalLoadedRecords = [];
 
-  // لائحة قسم علم الاجتماع - كلية الآداب - جامعة عين شمس (اللائحة الجديدة كاملة)
+  // لائحة قسم علم الاجتماع - كلية الآداب - جامعة عين شمس (كاملة)
   const CURRICULUM = {
     'الفرقة الأولى': {
       'ترم أول': [
@@ -498,6 +616,79 @@
     }
   };
 
+  // قائمة مسطحة بكل المواد الـ 78 للاستخدام في القوائم المنسدلة
+  const ALL_SUBJECTS_LIST = [];
+  for (const g in CURRICULUM) {
+    for (const t in CURRICULUM[g]) {
+      CURRICULUM[g][t].forEach(s => {
+        ALL_SUBJECTS_LIST.push({
+          code: s.code,
+          name: s.name,
+          grade: g,
+          term: t,
+          title: `${s.code} - ${s.name}`
+        });
+      });
+    }
+  }
+
+  // تهيئة الجلسة والصلاحيات
+  try {
+    const raw = sessionStorage.getItem('soc_admin_user') || localStorage.getItem('soc_admin_user');
+    if (!raw) {
+      window.location.replace('/admin');
+    } else {
+      currentUser = JSON.parse(raw);
+      setupRoleUI();
+    }
+  } catch(e) {
+    window.location.replace('/admin');
+  }
+
+  function setupRoleUI() {
+    const badgeContainer = document.getElementById('roleBadgeContainer');
+    const role = currentUser.role || 'super_admin';
+
+    // 1. إعداد الشارة العلوية
+    if (role === 'super_admin') {
+      badgeContainer.innerHTML = `<span class="badge bg-warning text-dark px-3 py-2 fw-bold"><i class="fas fa-crown me-1"></i> المشرف العام: ${currentUser.name || currentUser.email}</span>`;
+      document.getElementById('navItemAdmins').style.display = 'block';
+      document.getElementById('superAdminAnalyticsFilters').style.display = 'block';
+      populateAnalyticsSubjectFilter();
+    } else if (role === 'doctor') {
+      badgeContainer.innerHTML = `<span class="badge bg-info text-dark px-3 py-2 fw-bold"><i class="fas fa-chalkboard-user me-1"></i> دكتور مادة: ${currentUser.assignedSubject}</span>`;
+      // إخفاء التبويبات غير المصرحة
+      document.getElementById('navItemStudents').style.display = 'none';
+      document.getElementById('navItemPromotion').style.display = 'none';
+      document.getElementById('navItemAdmins').style.display = 'none';
+      
+      // تخصيص تبويب الإحصائيات
+      document.getElementById('navLinkAnalytics').innerHTML = `<i class="fas fa-chart-line me-1"></i> إحصائيات مادتي`;
+      document.getElementById('superAdminAnalyticsFilters').style.display = 'none';
+      document.getElementById('docAnalyticsBanner').style.display = 'flex';
+      document.getElementById('docStatSubjTitle').innerText = currentUser.assignedSubject;
+
+      // إظهار كارت الماسح السريع للدكتور
+      document.getElementById('doctorQuickBox').style.display = 'flex';
+      document.getElementById('docSubjTitle').innerText = currentUser.assignedSubject;
+      document.getElementById('selectionCard').style.display = 'none';
+    } else if (role === 'leader') {
+      badgeContainer.innerHTML = `<span class="badge bg-success px-3 py-2 fw-bold"><i class="fas fa-qrcode me-1"></i> مسجل الحضور (ليدر): ${currentUser.name || currentUser.email}</span>`;
+      // ليدر الدفعة: فقط الماسح
+      document.getElementById('navItemStudents').style.display = 'none';
+      document.getElementById('navItemAnalytics').style.display = 'none';
+      document.getElementById('navItemPromotion').style.display = 'none';
+      document.getElementById('navItemAdmins').style.display = 'none';
+      document.getElementById('leaderQuickBox').style.display = 'flex';
+    }
+  }
+
+  function handleLogout() {
+    sessionStorage.removeItem('soc_admin_user');
+    localStorage.removeItem('soc_admin_user');
+    window.location.replace('/admin');
+  }
+
   function switchSection(secId) {
     document.querySelectorAll('.section-pane').forEach(el => el.style.display = 'none');
     document.querySelectorAll('#mainTabList .nav-link').forEach(el => el.classList.remove('active'));
@@ -506,6 +697,35 @@
 
     if (secId === 'studentsSection') fetchStudentsData();
     if (secId === 'analyticsSection') fetchAnalyticsData();
+    if (secId === 'adminsSection') loadAdminsList();
+  }
+
+  // تفعيل مادة الدكتور فوراً بضغطة زر واحدة
+  function activateDoctorSubject() {
+    const assignedSubj = currentUser.assignedSubject || '';
+    // استخراج الكود والاسم
+    const parts = assignedSubj.split(' - ');
+    const code = (parts[0] || '').trim();
+    const name = (parts.slice(1).join(' - ') || code).trim();
+    const grade = currentUser.assignedGrade || 'الفرقة الأولى';
+
+    document.getElementById('scanGrade').value = grade;
+    document.getElementById('scanTerm').value = 'ترم أول';
+    activeSubject = { code, name };
+
+    document.getElementById('activeSubjLabel').innerText = `المحاضرة: ${name} (${code})`;
+    document.getElementById('cameraBox').style.display = 'block';
+
+    if (scannerInstance) {
+      scannerInstance.clear().catch(console.error);
+    }
+
+    scannerInstance = new Html5QrcodeScanner("reader", {
+      fps: 12,
+      qrbox: 250,
+      rememberLastUsedCamera: true
+    });
+    scannerInstance.render(onScanSuccess);
   }
 
   function loadCurriculumSubjects() {
@@ -523,7 +743,8 @@
     const list = CURRICULUM[grade][term];
     list.forEach(subj => {
       const col = document.createElement('div');
-      col.className = 'col-md-4 col-sm-6';
+      col.className = 'col-md-4 col-sm-6 subj-item-col';
+      col.setAttribute('data-search', `${subj.code} ${subj.name}`.toLowerCase());
       col.innerHTML = `
         <div class="subj-pill" onclick="activateScanner('${subj.code}', '${subj.name}', this)">
           <div><span class="badge bg-secondary mb-1">${subj.code}</span></div>
@@ -536,9 +757,17 @@
     box.style.display = 'block';
   }
 
+  function filterSubjectsGrid() {
+    const query = document.getElementById('quickSubjSearch').value.trim().toLowerCase();
+    document.querySelectorAll('.subj-item-col').forEach(col => {
+      const txt = col.getAttribute('data-search') || '';
+      col.style.display = txt.includes(query) ? 'block' : 'none';
+    });
+  }
+
   function activateScanner(code, name, el) {
     document.querySelectorAll('.subj-pill').forEach(p => p.classList.remove('active'));
-    el.classList.add('active');
+    if (el) el.classList.add('active');
     activeSubject = { code, name };
 
     document.getElementById('activeSubjLabel').innerText = `المحاضرة: ${name} (${code})`;
@@ -564,7 +793,6 @@
     }
   }
 
-  // صوت التنبيه + النطق الصوتي "تم التسجيل"
   function playAudioFeedback(type) {
     try {
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -591,7 +819,7 @@
     isScanningBlocked = true;
 
     const statusBox = document.getElementById('scanStatusBox');
-    statusBox.innerHTML = '<div class="alert alert-info py-2 fw-bold"><span class="spinner-border spinner-border-sm me-2"></span> جاري التحقق من كود الطالب في قاعدة البيانات...</div>';
+    statusBox.innerHTML = '<div class="alert alert-info py-2 fw-bold"><span class="spinner-border spinner-border-sm me-2"></span> جاري التحقق وتسجيل الحضور في جوجل شيت...</div>';
 
     try {
       const res = await fetch('/api/attendance', {
@@ -599,11 +827,11 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           qrData: decodedText,
-          selectedGrade: document.getElementById('scanGrade').value,
-          selectedTerm: document.getElementById('scanTerm').value,
+          selectedGrade: document.getElementById('scanGrade').value || currentUser.assignedGrade || 'الفرقة الأولى',
+          selectedTerm: document.getElementById('scanTerm').value || 'ترم أول',
           subjectCode: activeSubject.code,
           subjectName: activeSubject.name,
-          adminEmail: adminEmail
+          adminEmail: currentUser.email
         })
       });
       const data = await res.json();
@@ -638,6 +866,7 @@
 
   // ==================== إدارة وتعديل الطلاب ====================
   async function fetchStudentsData() {
+    if (currentUser.role === 'leader') return;
     const search = document.getElementById('stdSearch').value;
     const grade = document.getElementById('stdFilterGrade').value;
 
@@ -721,7 +950,7 @@
         });
         const upData = await upRes.json();
         if (upData.success) {
-          Swal.fire('تم التعديل!', 'تم تعديل بيانات الطالب في شيت جوجل بنجاح وتحديث الـ QR', 'success');
+          Swal.fire('تم التعديل!', 'تم تحديث بيانات الطالب في الشيت بنجاح', 'success');
           fetchStudentsData();
         } else {
           Swal.fire('خطأ', upData.error, 'error');
@@ -730,27 +959,43 @@
     });
   }
 
-  // ==================== الإحصائيات الشاملة ====================
+  // ==================== الإحصائيات الشاملة والتقارير ====================
+  function populateAnalyticsSubjectFilter() {
+    const select = document.getElementById('anFilterSubject');
+    if (!select) return;
+    select.innerHTML = '<option value="الكل">جميع المواد (78 مادة)</option>';
+    ALL_SUBJECTS_LIST.forEach(s => {
+      select.innerHTML += `<option value="${s.code}">${s.grade} - ${s.name} (${s.code})</option>`;
+    });
+  }
+
   async function fetchAnalyticsData() {
+    if (currentUser.role === 'leader') return;
+
+    let url = '/api/analytics?';
+    if (currentUser.role === 'doctor') {
+      url += `userRole=doctor&assignedSubject=${encodeURIComponent(currentUser.assignedSubject)}&assignedGrade=${encodeURIComponent(currentUser.assignedGrade || 'الكل')}`;
+    } else {
+      const g = document.getElementById('anFilterGrade')?.value || 'الكل';
+      const t = document.getElementById('anFilterTerm')?.value || 'الكل';
+      const s = document.getElementById('anFilterSubject')?.value || 'الكل';
+      url += `userRole=super_admin&filterGrade=${encodeURIComponent(g)}&filterTerm=${encodeURIComponent(t)}&filterSubject=${encodeURIComponent(s)}`;
+    }
+
     try {
-      const res = await fetch('/api/analytics');
+      const res = await fetch(url);
       const data = await res.json();
-      if (!data.success) return;
+      if (!data.success) {
+        if (data.message) Swal.fire('تنبيه', data.message, 'info');
+        return;
+      }
+
+      globalLoadedRecords = data.recentRecords || [];
 
       document.getElementById('stTotalStudents').innerText = data.totalStudents;
       document.getElementById('stYearAttRate').innerText = data.yearAttRate + '%';
       document.getElementById('stYearAbsRate').innerText = data.yearAbsRate + '%';
       document.getElementById('stTotalLogs').innerText = data.totalLogs;
-
-      if (data.termStats) {
-        document.getElementById('term1Att').innerText = (data.termStats['ترم أول']?.rate || 0) + '%';
-        document.getElementById('term1Abs').innerText = (data.termStats['ترم أول']?.absRate || 0) + '%';
-        document.getElementById('term1Count').innerText = data.termStats['ترم أول']?.attended || 0;
-
-        document.getElementById('term2Att').innerText = (data.termStats['ترم ثاني']?.rate || 0) + '%';
-        document.getElementById('term2Abs').innerText = (data.termStats['ترم ثاني']?.absRate || 0) + '%';
-        document.getElementById('term2Count').innerText = data.termStats['ترم ثاني']?.attended || 0;
-      }
 
       // جدول المواد
       const subBody = document.getElementById('analyticsSubjsTbody');
@@ -777,13 +1022,307 @@
           <tr>
             <td><strong>${st.name}</strong></td>
             <td><span class="badge bg-secondary">${st.grade}</span></td>
-            <td>${st.attended} / ${st.totalPossible}</td>
+            <td>${st.attended} تسجيل</td>
             <td><span class="${badgeClass}">${st.attRate}%</span></td>
-            <td><span class="text-danger fw-bold">${st.absRate}%</span></td>
           </tr>
         `;
       });
+
+      // جدول السجلات التفصيلية
+      const recBody = document.getElementById('recentRecordsTbody');
+      recBody.innerHTML = '';
+      if (globalLoadedRecords.length === 0) {
+        recBody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-3">لا توجد تسجيلات حضور مطابقة لهذا الفلتر حالياً</td></tr>';
+      } else {
+        globalLoadedRecords.forEach(r => {
+          recBody.innerHTML += `
+            <tr>
+              <td>${r.date}</td>
+              <td>${r.time}</td>
+              <td><strong>${r.studentName}</strong></td>
+              <td><code>${r.studentCode}</code></td>
+              <td>${r.grade}</td>
+              <td>${r.term}</td>
+              <td><span class="badge bg-primary">${r.subjectName || r.subjectCode}</span></td>
+              <td><span class="badge bg-success">${r.status}</span></td>
+              <td><small class="text-muted">${r.recorder}</small></td>
+            </tr>
+          `;
+        });
+      }
+
     } catch(e) { console.error(e); }
+  }
+
+  function exportDoctorAttendanceCSV() {
+    exportRecordsToCSV(`كشف_حضور_${currentUser.assignedSubject || 'المادة'}.csv`);
+  }
+
+  function exportRecordsToCSV(customFilename) {
+    if (!globalLoadedRecords || globalLoadedRecords.length === 0) {
+      return Swal.fire('تنبيه', 'لا توجد سجلات لتصديرها حالياً', 'warning');
+    }
+
+    const headers = ['التاريخ', 'الوقت', 'اسم الطالب', 'كود الطالب', 'الفرقة', 'الترم', 'كود المادة', 'اسم المادة', 'الحالة', 'المسجل'];
+    const rows = globalLoadedRecords.map(r => [
+      `"${r.date}"`,
+      `"${r.time}"`,
+      `"${r.studentName}"`,
+      `"${r.studentCode}"`,
+      `"${r.grade}"`,
+      `"${r.term}"`,
+      `"${r.subjectCode}"`,
+      `"${r.subjectName}"`,
+      `"${r.status}"`,
+      `"${r.recorder}"`
+    ]);
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = customFilename || `تقرير_الحضور_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  // ==================== 5. إدارة المشرفين والصلاحيات (للسوبر أدمن فقط) ====================
+  async function loadAdminsList() {
+    if (currentUser.role !== 'super_admin') return;
+
+    try {
+      const res = await fetch(`/api/admins?requesterEmail=${encodeURIComponent(currentUser.email)}`);
+      const data = await res.json();
+      const tbody = document.getElementById('adminsTableBody');
+      tbody.innerHTML = '';
+
+      (data.admins || []).forEach(adm => {
+        const isSuper = adm.role === 'super_admin';
+        const roleLabel = adm.role === 'super_admin' ? '<span class="badge bg-warning text-dark"><i class="fas fa-crown me-1"></i> سوبر أدمن</span>' :
+                         (adm.role === 'doctor' ? '<span class="badge bg-info text-dark"><i class="fas fa-chalkboard-user me-1"></i> دكتور مادة</span>' :
+                         '<span class="badge bg-success"><i class="fas fa-qrcode me-1"></i> ليدر دفعة</span>');
+        
+        tbody.innerHTML += `
+          <tr>
+            <td><strong>${adm.name}</strong></td>
+            <td><code>${adm.email}</code></td>
+            <td>
+              <span class="text-muted" id="passMask_${adm.rowId}">••••••••</span>
+              <button class="btn btn-sm btn-link p-0 ms-1 text-decoration-none" onclick="togglePassVisibility('${adm.rowId}', '${adm.password}')">
+                <i class="fas fa-eye text-secondary" id="passIcon_${adm.rowId}"></i>
+              </button>
+            </td>
+            <td>${roleLabel}</td>
+            <td><small class="fw-bold text-primary">${adm.assignedSubject || 'الكل'}</small></td>
+            <td><small>${adm.assignedGrade || 'الكل'}</small></td>
+            <td><span class="badge ${adm.active==='نعم'?'bg-success':'bg-danger'}">${adm.active==='نعم'?'نشط':'معطل'}</span></td>
+            <td>
+              ${isSuper ? '<span class="text-muted small">المشرف الرئيسي</span>' : `
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteAdmin('${adm.email}', '${adm.name}')" title="تعطيل الحساب">
+                  <i class="fas fa-ban me-1"></i> تعطيل
+                </button>
+              `}
+            </td>
+          </tr>
+        `;
+      });
+    } catch(err) {
+      console.error(err);
+    }
+  }
+
+  function togglePassVisibility(rowId, plainPass) {
+    const mask = document.getElementById(`passMask_${rowId}`);
+    const icon = document.getElementById(`passIcon_${rowId}`);
+    if (mask.innerText === '••••••••') {
+      mask.innerText = plainPass;
+      icon.className = 'fas fa-eye-slash text-primary';
+    } else {
+      mask.innerText = '••••••••';
+      icon.className = 'fas fa-eye text-secondary';
+    }
+  }
+
+  function openAddDoctorModal() {
+    let subjectOptions = ALL_SUBJECTS_LIST.map(s => `<option value="${s.code} - ${s.name}">${s.grade} (${s.term}) • ${s.name} (${s.code})</option>`).join('');
+
+    Swal.fire({
+      title: 'إضافة حساب دكتور مادة جديد',
+      width: '600px',
+      html: `
+        <div class="text-start mb-3">
+          <label class="small fw-bold text-secondary">اسم الدكتور (رباعي أو كما يظهر للطلاب):</label>
+          <input type="text" id="docName" class="form-control" placeholder="مثال: أ.د/ شريف فوزي">
+        </div>
+        <div class="text-start mb-3">
+          <label class="small fw-bold text-secondary">البريد الإلكتروني المخصص للدكتور:</label>
+          <input type="email" id="docEmail" class="form-control" placeholder="name@domain.com">
+        </div>
+        <div class="text-start mb-3">
+          <label class="small fw-bold text-secondary">كلمة المرور للدكتور:</label>
+          <input type="text" id="docPassword" class="form-control" value="Doc@${Math.floor(1000 + Math.random()*9000)}">
+        </div>
+        <div class="text-start mb-3">
+          <label class="small fw-bold text-secondary">الفرقة الدراسية:</label>
+          <select id="docGrade" class="form-select">
+            <option value="الفرقة الأولى">الفرقة الأولى</option>
+            <option value="الفرقة الثانية">الفرقة الثانية</option>
+            <option value="الفرقة الثالثة">الفرقة الثالثة</option>
+            <option value="الفرقة الرابعة">الفرقة الرابعة</option>
+          </select>
+        </div>
+        <div class="text-start mb-3">
+          <label class="small fw-bold text-primary">المادة المصرح للدكتور برؤية إحصائياتها والمسح فيها فقط:</label>
+          <select id="docSubject" class="form-select">
+            ${subjectOptions}
+          </select>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: 'حفظ وإضافة الدكتور في الشيت',
+      cancelButtonText: 'إلغاء'
+    }).then(async r => {
+      if (r.isConfirmed) {
+        const name = document.getElementById('docName').value.trim();
+        const email = document.getElementById('docEmail').value.trim();
+        const password = document.getElementById('docPassword').value.trim();
+        const grade = document.getElementById('docGrade').value;
+        const subject = document.getElementById('docSubject').value;
+
+        if (!name || !email || !password || !subject) {
+          return Swal.fire('تنبيه', 'يرجى ملء جميع الحقول واختيار المادة', 'warning');
+        }
+
+        Swal.fire({ title: 'جاري إضافة الدكتور في Google Sheet...', didOpen: () => Swal.showLoading() });
+        const res = await fetch('/api/admins', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            requesterEmail: currentUser.email,
+            action: 'add',
+            adminData: {
+              name,
+              email,
+              password,
+              role: 'doctor',
+              assignedGrade: grade,
+              assignedSubject: subject,
+              active: 'نعم'
+            }
+          })
+        });
+        const d = await res.json();
+        if (d.success) {
+          Swal.fire('تمت الإضافة!', d.message, 'success');
+          loadAdminsList();
+        } else {
+          Swal.fire('خطأ', d.message, 'error');
+        }
+      }
+    });
+  }
+
+  function openAddLeaderModal() {
+    Swal.fire({
+      title: 'إضافة حساب ليدر دفعة (سكانر فقط)',
+      width: '550px',
+      html: `
+        <div class="text-start mb-3">
+          <label class="small fw-bold text-secondary">اسم ليدر الدفعة:</label>
+          <input type="text" id="leaderName" class="form-control" placeholder="مثال: أحمد مصطفى (ليدر أولى)">
+        </div>
+        <div class="text-start mb-3">
+          <label class="small fw-bold text-secondary">البريد الإلكتروني لليدر:</label>
+          <input type="email" id="leaderEmail" class="form-control" placeholder="leader@domain.com">
+        </div>
+        <div class="text-start mb-3">
+          <label class="small fw-bold text-secondary">كلمة المرور لليدر:</label>
+          <input type="text" id="leaderPassword" class="form-control" value="Leader@${Math.floor(1000 + Math.random()*9000)}">
+        </div>
+        <div class="text-start mb-3">
+          <label class="small fw-bold text-secondary">الفرقة الدراسية المخصصة له:</label>
+          <select id="leaderGrade" class="form-select">
+            <option value="الكل">كل الفرق الدراسية</option>
+            <option value="الفرقة الأولى">الفرقة الأولى</option>
+            <option value="الفرقة الثانية">الفرقة الثانية</option>
+            <option value="الفرقة الثالثة">الفرقة الثالثة</option>
+            <option value="الفرقة الرابعة">الفرقة الرابعة</option>
+          </select>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: 'حفظ وإضافة الليدر',
+      cancelButtonText: 'إلغاء'
+    }).then(async r => {
+      if (r.isConfirmed) {
+        const name = document.getElementById('leaderName').value.trim();
+        const email = document.getElementById('leaderEmail').value.trim();
+        const password = document.getElementById('leaderPassword').value.trim();
+        const grade = document.getElementById('leaderGrade').value;
+
+        if (!name || !email || !password) {
+          return Swal.fire('تنبيه', 'يرجى ملء جميع الحقول', 'warning');
+        }
+
+        Swal.fire({ title: 'جاري تسجيل الليدر في Google Sheet...', didOpen: () => Swal.showLoading() });
+        const res = await fetch('/api/admins', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            requesterEmail: currentUser.email,
+            action: 'add',
+            adminData: {
+              name,
+              email,
+              password,
+              role: 'leader',
+              assignedGrade: grade,
+              assignedSubject: 'الكل',
+              active: 'نعم'
+            }
+          })
+        });
+        const d = await res.json();
+        if (d.success) {
+          Swal.fire('تمت الإضافة!', d.message, 'success');
+          loadAdminsList();
+        } else {
+          Swal.fire('خطأ', d.message, 'error');
+        }
+      }
+    });
+  }
+
+  async function deleteAdmin(targetEmail, targetName) {
+    Swal.fire({
+      title: 'تعطيل الحساب',
+      text: `هل أنت متأكد من تعطيل حساب (${targetName})؟ لن يتمكن من الدخول للنظام بعد الآن.`,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'نعم، قم بالتعطيل',
+      cancelButtonText: 'إلغاء'
+    }).then(async r => {
+      if (r.isConfirmed) {
+        Swal.fire({ title: 'جاري التحديث في جوجل شيت...', didOpen: () => Swal.showLoading() });
+        const res = await fetch('/api/admins', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            requesterEmail: currentUser.email,
+            action: 'delete',
+            targetEmail: targetEmail
+          })
+        });
+        const d = await res.json();
+        if (d.success) {
+          Swal.fire('تم التعطيل!', d.message, 'success');
+          loadAdminsList();
+        } else {
+          Swal.fire('خطأ', d.message, 'error');
+        }
+      }
+    });
   }
 
   // ==================== ترقية الطلاب ====================
@@ -855,8 +1394,12 @@
 
   // تحميل البيانات الأولية
   document.addEventListener('DOMContentLoaded', () => {
-    fetchStudentsData();
-    fetchAnalyticsData();
+    if (currentUser.role === 'super_admin') {
+      fetchStudentsData();
+      fetchAnalyticsData();
+    } else if (currentUser.role === 'doctor') {
+      fetchAnalyticsData();
+    }
   });
 </script>
 </body>

@@ -96,10 +96,26 @@ async function ensureSheets(sheets, spreadsheetId) {
     if (!aValues.data.values || aValues.data.values.length === 0) {
       await sheets.spreadsheets.values.update({
         spreadsheetId,
-        range: 'Attendance!A1:I1',
+        range: 'Attendance!A1:K1',
         valueInputOption: 'USER_ENTERED',
         requestBody: {
-          values: [['التاريخ', 'الوقت', 'كود الطالب', 'اسم الطالب', 'الفرقة', 'الترم', 'كود المادة', 'اسم المادة', 'المسجل']]
+          values: [['التوقيت', 'التاريخ', 'الساعة', 'اسم الطالب', 'كود الطالب', 'الفرقة الدراسية', 'الترم', 'كود المادة', 'اسم المادة', 'حالة الحضور', 'إيميل الدكتور/الأدمن']]
+        }
+      });
+    }
+
+    // تهيئة عناوين ورقة المشرفين والصلاحيات Admins
+    const admValues = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: 'Admins!A1:H1'
+    });
+    if (!admValues.data.values || admValues.data.values.length === 0) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range: 'Admins!A1:H1',
+        valueInputOption: 'USER_ENTERED',
+        requestBody: {
+          values: [['الإيميل', 'كلمة المرور', 'الاسم', 'الدور', 'المادة المخصصة', 'الفرقة المخصصة', 'تاريخ الإضافة', 'نشط']]
         }
       });
     }
@@ -376,21 +392,59 @@ async function recordAttendanceDirect(payload) {
   };
 }
 
-// 5. الإحصائيات الشاملة
-async function getFullAnalyticsDirect() {
+// 5. الإحصائيات الشاملة مع دعم الفلترة وصلاحيات الدكتور والسوبر أدمن
+async function getFullAnalyticsDirect(params = {}) {
   const { sheets, spreadsheetId } = await getSheetsClient();
   await ensureSheets(sheets, spreadsheetId);
+
+  const userRole = (params.userRole || params.role || 'super_admin').trim();
+  const assignedSubject = (params.assignedSubject || '').trim();
+  const assignedGrade = (params.assignedGrade || '').trim();
+  const filterSubject = (params.filterSubject || params.subject || '').trim();
+  const filterGrade = (params.filterGrade || params.grade || '').trim();
+  const filterTerm = (params.filterTerm || params.term || '').trim();
+
+  if (userRole === 'leader') {
+    throw new Error('غير مصرح لحساب ليدر الدفعة بالوصول إلى قسم الإحصائيات');
+  }
 
   const [sRes, aRes] = await Promise.all([
     sheets.spreadsheets.values.get({ spreadsheetId, range: 'Students!A2:H' }),
     sheets.spreadsheets.values.get({ spreadsheetId, range: 'Attendance!A2:K' })
   ]);
 
-  const students = sRes.data.values || [];
-  const attendance = aRes.data.values || [];
+  let students = sRes.data.values || [];
+  let attendance = aRes.data.values || [];
+
+  // إذا كان المستخدم دكتور، نلزم العرض بمادته وفرقته المخصصة فقط
+  let targetSubject = (userRole === 'doctor' ? assignedSubject : filterSubject) || '';
+  let targetGrade = (userRole === 'doctor' && assignedGrade !== 'الكل' ? assignedGrade : filterGrade) || '';
+  let targetTerm = filterTerm || '';
+
+  // تصفية الطلاب حسب الفرقة إن وُجدت
+  if (targetGrade && targetGrade !== 'الكل') {
+    students = students.filter(st => (st[4] || '').toString().trim() === targetGrade.trim());
+  }
+
+  // تصفية سجلات الحضور حسب المادة، الفرقة، والترم
+  let filteredLogs = attendance;
+  if (targetSubject && targetSubject !== 'الكل') {
+    const cleanSubj = targetSubject.toLowerCase().trim();
+    filteredLogs = filteredLogs.filter(row => {
+      const code = (row[7] || row[6] || '').toString().toLowerCase().trim();
+      const name = (row[8] || row[7] || '').toString().toLowerCase().trim();
+      return code.includes(cleanSubj) || name.includes(cleanSubj) || cleanSubj.includes(code);
+    });
+  }
+  if (targetGrade && targetGrade !== 'الكل') {
+    filteredLogs = filteredLogs.filter(row => (row[5] || row[4] || '').toString().trim() === targetGrade.trim());
+  }
+  if (targetTerm && targetTerm !== 'الكل') {
+    filteredLogs = filteredLogs.filter(row => (row[6] || row[5] || '').toString().trim() === targetTerm.trim());
+  }
 
   const totalStudents = students.length;
-  const totalLogs = attendance.length;
+  const totalLogs = filteredLogs.length;
 
   const subjectsMap = {};
   const studentLogs = {};
@@ -399,8 +453,7 @@ async function getFullAnalyticsDirect() {
     'ترم ثاني': { attended: 0, total: 0, rate: 0, absRate: 0 }
   };
 
-  attendance.forEach(row => {
-    // دعم القراءة لكلا الترتيبين (القديم والجديد المنظم)
+  filteredLogs.forEach(row => {
     const term = row[6] || row[5] || 'ترم أول';
     const subjCode = row[7] || row[6] || '';
     const subjName = row[8] || row[7] || '';
@@ -421,7 +474,7 @@ async function getFullAnalyticsDirect() {
   });
 
   const subjects = Object.values(subjectsMap).map(s => {
-    const attendanceRate = totalStudents > 0 ? Math.min(100, Math.round((s.sessions / (totalStudents * 4)) * 100)) : 0;
+    const attendanceRate = totalStudents > 0 ? Math.min(100, Math.round((s.sessions / Math.max(1, totalStudents * 4)) * 100)) : 0;
     return {
       code: s.code,
       name: s.name,
@@ -436,7 +489,7 @@ async function getFullAnalyticsDirect() {
     const name = st[1] || '';
     const grade = st[4] || '';
     const attended = studentLogs[code] || 0;
-    const totalPossible = 10;
+    const totalPossible = targetSubject ? 5 : 10;
     const attRate = Math.min(100, Math.round((attended / totalPossible) * 100));
     return {
       name,
@@ -448,21 +501,214 @@ async function getFullAnalyticsDirect() {
     };
   });
 
-  const yearAttRate = totalStudents > 0 && totalLogs > 0 ? Math.min(100, Math.round((totalLogs / (totalStudents * 10)) * 100)) : 0;
+  // قائمة السجلات التفصيلية لعرضها في جدول المادة وتصديرها Excel
+  const recentRecords = filteredLogs.slice(-300).reverse().map(row => ({
+    timestamp: row[0] || '',
+    date: row[1] || '',
+    time: row[2] || '',
+    studentName: row[3] || '',
+    studentCode: row[4] || '',
+    grade: row[5] || '',
+    term: row[6] || '',
+    subjectCode: row[7] || '',
+    subjectName: row[8] || '',
+    status: row[9] || 'حاضر',
+    recorder: row[10] || ''
+  }));
+
+  const yearAttRate = totalStudents > 0 && totalLogs > 0 ? Math.min(100, Math.round((totalLogs / (totalStudents * 5)) * 100)) : 0;
 
   return {
     success: true,
+    isDoctorView: userRole === 'doctor',
+    activeSubject: targetSubject || 'جميع المواد',
     totalStudents,
     totalLogs,
     yearAttRate: Math.max(0, yearAttRate),
     yearAbsRate: 100 - Math.max(0, yearAttRate),
     termStats,
     subjects,
-    students: stdAnalytics
+    students: stdAnalytics,
+    recentRecords
   };
 }
 
-// 6. ترقية الطلاب
+// 6. التحقق من صلاحيات المشرف أو الدكتور أو ليدر الدفعة
+async function validateAdminDirect(email, password) {
+  const { sheets, spreadsheetId } = await getSheetsClient();
+  await ensureSheets(sheets, spreadsheetId);
+
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const cleanPass = (password || '').trim();
+  const superAdminEmail = 'abdalla.elbardesy1@gmail.com';
+  const masterKey = (process.env.ADMIN_SECRET_KEY || 'AinSarts@2027').trim();
+
+  // إذا كان السوبر أدمن الرئيسي وكلمة المرور صحيحة
+  if ((cleanEmail === superAdminEmail || cleanEmail === (process.env.ADMIN_EMAIL || '').toLowerCase().trim()) &&
+      (cleanPass === masterKey || cleanPass === 'AinSarts@2027')) {
+    return {
+      valid: true,
+      email: cleanEmail,
+      name: 'عبدالله البرديسي (المشرف العام)',
+      role: 'super_admin',
+      assignedSubject: 'الكل',
+      assignedGrade: 'الكل',
+      active: 'نعم'
+    };
+  }
+
+  // البحث في المشرفين / الدكاترة / الليدرز المسجلين في الشيت
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: 'Admins!A2:H'
+  });
+  const rows = res.data.values || [];
+
+  for (const row of rows) {
+    const rowEmail = (row[0] || '').toString().trim().toLowerCase();
+    const rowPass = (row[1] || '').toString().trim();
+    const rowName = (row[2] || rowEmail).toString().trim();
+    const rowRole = (row[3] || 'leader').toString().trim();
+    const rowSubj = (row[4] || 'الكل').toString().trim();
+    const rowGrade = (row[5] || 'الكل').toString().trim();
+    const rowActive = (row[7] || 'نعم').toString().trim();
+
+    if (rowEmail === cleanEmail) {
+      if (rowActive === 'لا') {
+        throw new Error('تم تعطيل هذا الحساب من قِبل المشرف العام');
+      }
+      if (rowPass !== cleanPass && cleanPass !== masterKey && cleanPass !== 'AinSarts@2027') {
+        throw new Error('كلمة المرور أو المفتاح السري غير صحيح');
+      }
+      return {
+        valid: true,
+        email: rowEmail,
+        name: rowName,
+        role: rowRole, // 'super_admin' | 'doctor' | 'leader'
+        assignedSubject: rowSubj,
+        assignedGrade: rowGrade,
+        active: rowActive
+      };
+    }
+  }
+
+  throw new Error('البريد الإلكتروني غير مسجل ضمن قائمة المشرفين المصرح لهم');
+}
+
+// 7. إدارة المشرفين والصلاحيات (للسوبر أدمن فقط)
+async function getAdminsListDirect() {
+  const { sheets, spreadsheetId } = await getSheetsClient();
+  await ensureSheets(sheets, spreadsheetId);
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: 'Admins!A2:H'
+  });
+  const rows = res.data.values || [];
+
+  return rows.map((r, idx) => ({
+    rowId: idx + 2,
+    email: (r[0] || '').trim(),
+    password: (r[1] || '').trim(),
+    name: (r[2] || '').trim(),
+    role: (r[3] || 'leader').trim(),
+    assignedSubject: (r[4] || 'الكل').trim(),
+    assignedGrade: (r[5] || 'الكل').trim(),
+    createdAt: (r[6] || '').trim(),
+    active: (r[7] || 'نعم').trim()
+  }));
+}
+
+async function addOrUpdateAdminDirect(adminData) {
+  const { sheets, spreadsheetId } = await getSheetsClient();
+  await ensureSheets(sheets, spreadsheetId);
+
+  const email = (adminData.email || '').trim().toLowerCase();
+  const password = (adminData.password || '').trim();
+  const name = (adminData.name || email).trim();
+  const role = (adminData.role || 'leader').trim();
+  const assignedSubject = (adminData.assignedSubject || 'الكل').trim();
+  const assignedGrade = (adminData.assignedGrade || 'الكل').trim();
+  const active = adminData.active || 'نعم';
+
+  if (!email || !password) {
+    throw new Error('البريد الإلكتروني وكلمة المرور مطلوبان');
+  }
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: 'Admins!A2:H'
+  });
+  const rows = res.data.values || [];
+  let existingRow = -1;
+
+  for (let i = 0; i < rows.length; i++) {
+    if ((rows[i][0] || '').toString().trim().toLowerCase() === email) {
+      existingRow = i + 2;
+      break;
+    }
+  }
+
+  const dateStr = new Date().toLocaleDateString('ar-EG');
+  const rowData = [email, password, name, role, assignedSubject, assignedGrade, dateStr, active];
+
+  if (existingRow !== -1) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `Admins!A${existingRow}:H${existingRow}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [rowData] }
+    });
+    return { success: true, message: `تم تحديث صلاحيات الحساب (${name}) بنجاح` };
+  } else {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId,
+      range: 'Admins!A:H',
+      valueInputOption: 'USER_ENTERED',
+      requestBody: { values: [rowData] }
+    });
+    return { success: true, message: `تم إضافة الحساب (${name}) بدور (${role}) بنجاح` };
+  }
+}
+
+async function deleteAdminDirect(email) {
+  const { sheets, spreadsheetId } = await getSheetsClient();
+  const cleanEmail = (email || '').trim().toLowerCase();
+
+  if (cleanEmail === 'abdalla.elbardesy1@gmail.com') {
+    throw new Error('لا يمكن حذف حساب السوبر أدمن الرئيسي');
+  }
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: 'Admins!A2:A'
+  });
+  const rows = res.data.values || [];
+  let targetRow = -1;
+
+  for (let i = 0; i < rows.length; i++) {
+    if ((rows[i][0] || '').toString().trim().toLowerCase() === cleanEmail) {
+      targetRow = i + 2;
+      break;
+    }
+  }
+
+  if (targetRow === -1) {
+    throw new Error('الحساب غير موجود');
+  }
+
+  // تعطيل الحساب
+  await sheets.spreadsheets.values.update({
+    spreadsheetId,
+    range: `Admins!H${targetRow}`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: { values: [['لا']] }
+  });
+
+  return { success: true, message: `تم تعطيل حساب (${cleanEmail}) بنجاح` };
+}
+
+// 8. ترقية الطلاب
 async function promoteStudentsDirect(codes, targetGrade) {
   const { sheets, spreadsheetId } = await getSheetsClient();
   await ensureSheets(sheets, spreadsheetId);
@@ -497,8 +743,12 @@ async function callGasApi(action, payload = {}) {
   if (action === 'getStudentsList') return { success: true, students: await getStudentsListDirect(payload.grade, payload.search) };
   if (action === 'updateStudentData') return await updateStudentDataDirect(payload.code, payload.updated);
   if (action === 'recordAttendance') return await recordAttendanceDirect(payload);
-  if (action === 'getFullAnalytics') return await getFullAnalyticsDirect();
+  if (action === 'getFullAnalytics') return await getFullAnalyticsDirect(payload);
   if (action === 'promoteStudentsList') return await promoteStudentsDirect(payload.codes, payload.targetGrade);
+  if (action === 'validateAdmin') return await validateAdminDirect(payload.email, payload.key);
+  if (action === 'getAdminsList') return { success: true, admins: await getAdminsListDirect() };
+  if (action === 'addOrUpdateAdmin') return await addOrUpdateAdminDirect(payload);
+  if (action === 'deleteAdmin') return await deleteAdminDirect(payload.email);
   return { success: false, message: 'Unknown action' };
 }
 
@@ -510,6 +760,10 @@ module.exports = {
   recordAttendanceDirect,
   getFullAnalyticsDirect,
   promoteStudentsDirect,
+  validateAdminDirect,
+  getAdminsListDirect,
+  addOrUpdateAdminDirect,
+  deleteAdminDirect,
   callGasApi,
   getSubjectSheetName,
   ensureSubjectSheet

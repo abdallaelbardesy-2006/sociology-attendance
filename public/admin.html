@@ -135,7 +135,7 @@
 </div>
 
 <!-- التطبيق الرئيسي (Dashboard PWA) -->
-<div id="dashboardApp" style="display:none;">
+<div id="dashboardApp" class="d-none">
   
   <div class="top-header d-flex justify-content-between align-items-center">
     <div>
@@ -144,7 +144,7 @@
     </div>
     <div class="d-flex align-items-center gap-2">
       <span class="badge bg-light text-primary px-3 py-2 fw-bold" id="adminBadge">--</span>
-      <button class="btn btn-outline-light btn-sm px-2" onclick="location.reload()" title="تسجيل الخروج"><i class="fas fa-power-off"></i></button>
+      <button class="btn btn-outline-light btn-sm px-2" onclick="handleLogout()" title="تسجيل الخروج"><i class="fas fa-power-off"></i></button>
     </div>
   </div>
 
@@ -529,9 +529,19 @@
 
       if (data.valid) {
         adminEmail = data.email;
+        sessionStorage.setItem('soc_admin_session', JSON.stringify({ email: adminEmail }));
         document.getElementById('adminBadge').innerText = adminEmail;
-        document.getElementById('loginView').style.display = 'none';
-        document.getElementById('dashboardApp').style.display = 'block';
+
+        // إخفاء شاشة تسجيل الدخول بالكامل وإظهار اللوحة في صفحة مستقلة
+        const loginEl = document.getElementById('loginView');
+        loginEl.classList.remove('d-flex');
+        loginEl.classList.add('d-none');
+        loginEl.style.display = 'none';
+
+        const dashEl = document.getElementById('dashboardApp');
+        dashEl.classList.remove('d-none');
+        dashEl.style.display = 'block';
+        window.scrollTo(0, 0);
 
         if (data.warning) {
           const banner = document.getElementById('gasWarningBanner');
@@ -553,6 +563,37 @@
       btn.innerHTML = '<i class="fas fa-unlock me-1"></i> تسجيل الدخول';
     }
   }
+
+  function handleLogout() {
+    sessionStorage.removeItem('soc_admin_session');
+    location.reload();
+  }
+
+  // فحص الجلسة السابقة عند تحميل الصفحة
+  document.addEventListener('DOMContentLoaded', () => {
+    try {
+      const saved = sessionStorage.getItem('soc_admin_session');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.email) {
+          adminEmail = parsed.email;
+          document.getElementById('adminBadge').innerText = adminEmail;
+          
+          const loginEl = document.getElementById('loginView');
+          loginEl.classList.remove('d-flex');
+          loginEl.classList.add('d-none');
+          loginEl.style.display = 'none';
+
+          const dashEl = document.getElementById('dashboardApp');
+          dashEl.classList.remove('d-none');
+          dashEl.style.display = 'block';
+
+          fetchStudentsData();
+          fetchAnalyticsData();
+        }
+      }
+    } catch (e) {}
+  });
 
   function switchSection(secId) {
     document.querySelectorAll('.section-pane').forEach(el => el.style.display = 'none');

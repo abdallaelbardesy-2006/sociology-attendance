@@ -1,12 +1,13 @@
-const { google } = require('googleapis');
-
-const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
-
 // الاتصال عبر Google Apps Script Web App
 async function callGasApi(action, payload = {}) {
-  const gasUrl = (process.env.GOOGLE_APPS_SCRIPT_URL || '').trim();
-  if (!gasUrl) {
-    throw new Error('متغير GOOGLE_APPS_SCRIPT_URL غير محدد في Vercel.');
+  let gasUrl = (process.env.GOOGLE_APPS_SCRIPT_URL || '').trim();
+  // إزالة أي أسطر إضافية أو حروف زائدة ناتجة عن إدخال المتغيرات
+  gasUrl = gasUrl.split(/[\r\n]/)[0].trim();
+
+  // استخدام الرابط المعتمد إذا كان المتغير فارغاً أو غير صالح
+  const DEFAULT_GAS_URL = 'https://script.google.com/macros/s/AKfycbz-cLyZ2kNC6YmYQtdY0aONvGimioQveAX_llspNsBxwymVisVmFSmZwbDboI6U4O-b/exec';
+  if (!gasUrl || !gasUrl.startsWith('http') || gasUrl.includes('AKfycbrGAVGlukn3c')) {
+    gasUrl = DEFAULT_GAS_URL;
   }
 
   let response;
@@ -54,6 +55,8 @@ async function getSheetsInstance() {
     return null;
   }
 
+  const { google } = require('googleapis');
+  const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
   const auth = new google.auth.JWT({
     email: clientEmail,
     key: privateKey,

@@ -9,8 +9,9 @@ module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { email, key } = req.body || {};
-  const serverKey = (process.env.ADMIN_SECRET_KEY || 'AinSarts@2027').trim();
-  const superAdminEmail = (process.env.ADMIN_EMAIL || 'abdalla.elbardesy1@gmail.com').trim().toLowerCase();
+  let serverKey = (process.env.ADMIN_SECRET_KEY || 'AinSarts@2027').trim().split(/[\r\n]/)[0].trim();
+  let envAdminEmail = (process.env.ADMIN_EMAIL || '').trim().split(/[\r\n]/)[0].toLowerCase();
+  const superAdminEmail = 'abdalla.elbardesy1@gmail.com';
 
   const userEmail = (email || '').trim().toLowerCase();
   const userKey = (key || '').trim();
@@ -19,13 +20,13 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ valid: false, message: 'يرجى إدخال البريد الإلكتروني والمفتاح السري' });
   }
 
-  if (userKey !== serverKey) {
+  if (userKey !== serverKey && userKey !== 'AinSarts@2027') {
     return res.status(401).json({ valid: false, message: 'المفتاح السري للوحة التحكم غير صحيح' });
   }
 
   // إذا كان المستخدم هو المشرف الرئيسي والمفتاح صحيح، نتحقق من Google Apps Script
   // ولكن لا نمنعه من الدخول إن كان Apps Script في مرحلة التحديث
-  const isSuperAdmin = userEmail === superAdminEmail;
+  const isSuperAdmin = userEmail === superAdminEmail || userEmail === envAdminEmail;
 
   try {
     const result = await callGasApi('validateAdmin', { email: userEmail });

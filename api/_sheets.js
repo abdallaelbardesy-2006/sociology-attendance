@@ -135,13 +135,13 @@ async function ensureSubjectSheet(sheets, spreadsheetId, tabTitle) {
       }
     });
 
-    // 2. كتابة صف العناوين
+    // 2. كتابة صف العناوين المتطابق والمنظم
     await sheets.spreadsheets.values.update({
       spreadsheetId,
-      range: `'${tabTitle}'!A1:G1`,
+      range: `'${tabTitle}'!A1:I1`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
-        values: [['التاريخ', 'الوقت', 'كود الطالب', 'اسم الطالب', 'الفرقة', 'الترم', 'المسجل/المشرف']]
+        values: [['التوقيت', 'التاريخ', 'الساعة', 'اسم الطالب', 'كود الطالب', 'الفرقة الدراسية', 'الترم', 'حالة الحضور', 'إيميل الدكتور/الأدمن']]
       }
     });
   }
@@ -318,20 +318,21 @@ async function recordAttendanceDirect(payload) {
   const now = new Date();
   const todayStr = now.toISOString().slice(0, 10);
   const timeStr = now.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+  const dateTimeStr = todayStr + ' ' + timeStr;
 
   // فحص منع التكرار في نفس اليوم والمادة
   const attRes = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: 'Attendance!A2:G'
+    range: 'Attendance!A2:K'
   });
   const attRows = attRes.data.values || [];
 
   for (const row of attRows) {
-    const rowDate = (row[0] || '').toString().trim();
-    const rowCode = (row[2] || '').toString().trim();
-    const rowSubj = (row[6] || '').toString().trim();
+    const rowDate = (row[1] || row[0] || '').toString().trim();
+    const rowCode = (row[4] || row[2] || '').toString().trim();
+    const rowSubj = (row[7] || row[6] || '').toString().trim();
 
-    if (rowDate === todayStr && rowCode === studentCode && rowSubj === subjectCode) {
+    if (rowDate.includes(todayStr) && rowCode === studentCode && rowSubj === subjectCode) {
       return {
         success: false,
         type: 'duplicate',
@@ -341,31 +342,33 @@ async function recordAttendanceDirect(payload) {
   }
 
   // أ. إنشاء وحفظ الحضور في التبويب المخصص لهذه المادة تحديداً
+  // الأعمدة: [التوقيت، التاريخ، الساعة، اسم الطالب، كود الطالب، الفرقة الدراسية، الترم، حالة الحضور، إيميل الدكتور/الأدمن]
   const subjectTabName = getSubjectSheetName(subjectCode, subjectName);
   await ensureSubjectSheet(sheets, spreadsheetId, subjectTabName);
 
   await sheets.spreadsheets.values.append({
     spreadsheetId,
-    range: `'${subjectTabName}'!A:G`,
+    range: `'${subjectTabName}'!A:I`,
     valueInputOption: 'USER_ENTERED',
     requestBody: {
-      values: [[todayStr, timeStr, studentCode, studentName, grade, term, recordedBy]]
+      values: [[dateTimeStr, todayStr, timeStr, studentName, studentCode, grade, term, 'حاضر', recordedBy]]
     }
   });
 
-  // ب. حفظ الحضور أيضاً في التبويب المركزي Attendance للإحصائيات والتقارير العامة
+  // ب. حفظ الحضور أيضاً في التبويب المركزي Attendance المتطابق مع الترويسة المحددة
+  // الأعمدة: [التوقيت، التاريخ، الساعة، اسم الطالب، كود الطالب، الفرقة الدراسية، الترم، كود المادة، اسم المادة، حالة الحضور، إيميل الدكتور/الأدمن]
   await sheets.spreadsheets.values.append({
     spreadsheetId,
-    range: 'Attendance!A:I',
+    range: 'Attendance!A:K',
     valueInputOption: 'USER_ENTERED',
     requestBody: {
-      values: [[todayStr, timeStr, studentCode, studentName, grade, term, subjectCode, subjectName, recordedBy]]
+      values: [[dateTimeStr, todayStr, timeStr, studentName, studentCode, grade, term, subjectCode, subjectName, 'حاضر', recordedBy]]
     }
   });
 
   return {
     success: true,
-    message: `تم رصد حضور الطالب: ${studentName} في شيت [${subjectTabName}]`,
+    message: `تم رصد حضور الطالب: ${studentName} في شيت [${subjectTabName}] بنجاح`,
     studentName: studentName,
     studentCode: studentCode,
     subjectTab: subjectTabName,
@@ -380,7 +383,7 @@ async function getFullAnalyticsDirect() {
 
   const [sRes, aRes] = await Promise.all([
     sheets.spreadsheets.values.get({ spreadsheetId, range: 'Students!A2:H' }),
-    sheets.spreadsheets.values.get({ spreadsheetId, range: 'Attendance!A2:I' })
+    sheets.spreadsheets.values.get({ spreadsheetId, range: 'Attendance!A2:K' })
   ]);
 
   const students = sRes.data.values || [];
@@ -397,10 +400,11 @@ async function getFullAnalyticsDirect() {
   };
 
   attendance.forEach(row => {
-    const term = row[5] || 'ترم أول';
-    const subjCode = row[6] || '';
-    const subjName = row[7] || '';
-    const stdCode = row[2] || '';
+    // دعم القراءة لكلا الترتيبين (القديم والجديد المنظم)
+    const term = row[6] || row[5] || 'ترم أول';
+    const subjCode = row[7] || row[6] || '';
+    const subjName = row[8] || row[7] || '';
+    const stdCode = row[4] || row[2] || '';
 
     if (subjCode) {
       if (!subjectsMap[subjCode]) subjectsMap[subjCode] = { code: subjCode, name: subjName, sessions: 0 };

@@ -2,8 +2,11 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>لوحة التحكم وسكانر الحضور (PWA) - قسم علم الاجتماع</title>
+  <title>بوابة تسجيل دخول المشرفين - قسم علم الاجتماع</title>
   
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#1a237e">
@@ -14,937 +17,157 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
   <style>
     * { font-family: 'Cairo', sans-serif; box-sizing: border-box; }
-    body { background: #f1f5f9; min-height: 100vh; padding-bottom: 70px; color: #1e293b; }
-
-    .top-header {
-      background: linear-gradient(135deg, #0d47a1, #1a237e);
-      color: white;
-      padding: 16px 24px;
-      box-shadow: 0 4px 15px rgba(13, 71, 161, 0.2);
-    }
-
-    .nav-tabs .nav-link {
-      font-weight: 700;
-      color: #64748b;
-      border: none;
-      padding: 12px 18px;
-      border-radius: 12px;
-      margin-left: 6px;
-      transition: all 0.2s ease;
-    }
-    .nav-tabs .nav-link.active {
-      color: #1a237e;
-      background: #e0e7ff;
-    }
-
-    .main-card {
-      background: #ffffff;
-      border-radius: 20px;
-      padding: 26px;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-      border: 1px solid #e2e8f0;
-      margin-bottom: 24px;
-    }
-
-    .stat-card {
-      border-radius: 18px;
-      padding: 22px 20px;
-      color: white;
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
-      position: relative;
-      overflow: hidden;
-    }
-    .stat-card .val { font-size: 2.2rem; font-weight: 900; line-height: 1.1; }
-    .stat-card .lbl { font-size: 0.9rem; opacity: 0.85; font-weight: 600; margin-top: 5px; }
-
-    .subj-pill {
-      cursor: pointer;
-      border: 2px solid #e2e8f0;
-      border-radius: 16px;
-      padding: 14px;
-      text-align: center;
-      transition: all 0.25s ease;
-      background: #ffffff;
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-    }
-    .subj-pill:hover {
-      border-color: #1a237e;
-      transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(26, 35, 126, 0.1);
-    }
-    .subj-pill.active {
-      border-color: #1a237e;
-      background: #eef2ff;
-      box-shadow: 0 0 0 3px rgba(26, 35, 126, 0.15);
-    }
-
-    #reader {
-      max-width: 480px;
-      margin: 0 auto;
-      border-radius: 20px;
-      overflow: hidden;
-      border: 3px solid #1a237e;
-    }
-
-    .scan-log-item {
-      padding: 12px 16px;
-      border-radius: 12px;
-      margin-bottom: 8px;
+    body {
+      background: linear-gradient(135deg, #0d47a1, #1a237e, #0f172a);
+      min-height: 100vh;
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      animation: fadeIn 0.3s ease;
+      justify-content: center;
+      padding: 20px;
+      margin: 0;
     }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
-
-    .badge-high { background: #dcfce7; color: #15803d; font-weight: 700; padding: 6px 12px; border-radius: 50px; }
-    .badge-mid { background: #fef9c3; color: #a16207; font-weight: 700; padding: 6px 12px; border-radius: 50px; }
-    .badge-low { background: #fee2e2; color: #b91c1c; font-weight: 700; padding: 6px 12px; border-radius: 50px; }
+    .login-card {
+      background: #ffffff;
+      border-radius: 28px;
+      padding: 36px 30px;
+      max-width: 440px;
+      width: 100%;
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.25);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      animation: popIn 0.35s ease;
+    }
+    @keyframes popIn {
+      from { transform: scale(0.94); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+    .form-control {
+      border-radius: 14px;
+      border: 1.5px solid #cbd5e1;
+      padding: 12px 16px;
+      font-size: 0.95rem;
+    }
+    .form-control:focus {
+      border-color: #1a237e;
+      box-shadow: 0 0 0 3px rgba(26, 35, 126, 0.15);
+    }
+    .btn-login {
+      background: linear-gradient(135deg, #1d4ed8, #1e40af);
+      color: white;
+      border-radius: 14px;
+      padding: 13px;
+      font-weight: 700;
+      border: none;
+      transition: all 0.2s ease;
+    }
+    .btn-login:hover {
+      background: linear-gradient(135deg, #1e40af, #172554);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 18px rgba(30, 64, 175, 0.35);
+      color: white;
+    }
   </style>
 </head>
 <body>
 
-<!-- شاشة تسجيل الدخول -->
-<div id="loginView" class="d-flex align-items-center justify-content-center" style="min-height: 100vh;">
-  <div class="card p-4 shadow-lg border-0 text-center" style="max-width: 420px; width: 100%; border-radius: 24px;">
-    <div class="mb-3 text-primary"><i class="fas fa-shield-halved fa-4x"></i></div>
-    <h4 class="fw-bold text-primary mb-1">لوحة تحكم وسكانر الحضور</h4>
-    <p class="text-muted small">قسم علم الاجتماع • كلية الآداب • جامعة عين شمس</p>
-    
-    <div class="mb-3 text-start">
-      <label class="form-label small fw-bold">البريد الإلكتروني المصرح</label>
-      <input type="email" id="loginEmail" class="form-control py-2 text-center" placeholder="name@domain.com">
-    </div>
-    <div class="mb-4 text-start">
-      <label class="form-label small fw-bold">المفتاح السري للوحة</label>
-      <input type="password" id="loginKey" class="form-control py-2 text-center" placeholder="••••••••••••">
+  <div class="login-card text-center">
+    <div class="mb-3 text-primary">
+      <i class="fas fa-shield-halved fa-4x"></i>
     </div>
     
-    <button class="btn btn-primary w-100 py-2 fw-bold" onclick="handleLogin()" id="btnLogin">
-      <i class="fas fa-unlock me-1"></i> تسجيل الدخول
-    </button>
-  </div>
-</div>
-
-<!-- التطبيق الرئيسي (Dashboard PWA) -->
-<div id="dashboardApp" class="d-none">
-  
-  <div class="top-header d-flex justify-content-between align-items-center">
-    <div>
-      <h5 class="mb-0 fw-bold"><i class="fas fa-graduation-cap me-2"></i> قسم علم الاجتماع • جامعة عين شمس</h5>
-      <span class="small opacity-75">نظام رصد الحضور الذكي بالـ QR Code (اللائحة الجديدة)</span>
-    </div>
-    <div class="d-flex align-items-center gap-2">
-      <span class="badge bg-light text-primary px-3 py-2 fw-bold" id="adminBadge">--</span>
-      <button class="btn btn-outline-light btn-sm px-2" onclick="handleLogout()" title="تسجيل الخروج"><i class="fas fa-power-off"></i></button>
-    </div>
-  </div>
-
-  <div class="container my-4">
+    <h4 class="fw-bold text-dark mb-1">لوحة تحكم وسكانر الحضور</h4>
+    <p class="text-muted small mb-4">قسم علم الاجتماع • كلية الآداب • جامعة عين شمس</p>
     
-    <div id="gasWarningBanner" class="alert alert-warning alert-dismissible fade show d-none shadow-sm rounded-4 mb-4" role="alert">
-      <div class="d-flex align-items-start gap-3">
-        <i class="fas fa-triangle-exclamation fa-2x text-warning flex-shrink-0 mt-1"></i>
-        <div>
-          <h6 class="alert-heading fw-bold mb-1">تنبيه اتصال قاعدة البيانات (Google Sheets)</h6>
-          <p id="gasWarningText" class="mb-0 small"></p>
+    <form id="loginForm" onsubmit="event.preventDefault(); handleLogin();">
+      <div class="mb-3 text-start">
+        <label class="form-label small fw-bold text-secondary">البريد الإلكتروني المصرح</label>
+        <div class="input-group">
+          <span class="input-group-text bg-light border-end-0 rounded-start-4"><i class="fas fa-envelope text-muted"></i></span>
+          <input type="email" id="loginEmail" class="form-control border-start-0 text-center" placeholder="name@domain.com" required autofocus value="abdalla.elbardesy1@gmail.com">
         </div>
       </div>
-    </div>
-    
-    <!-- التبويبات الرئيسية -->
-    <ul class="nav nav-tabs mb-4 border-0" id="mainTabList">
-      <li class="nav-item">
-        <button class="nav-link active" onclick="switchSection('scannerSection')"><i class="fas fa-camera me-1"></i> ماسح الحضور (Scanner)</button>
-      </li>
-      <li class="nav-item">
-        <button class="nav-link" onclick="switchSection('studentsSection')"><i class="fas fa-users-gear me-1"></i> إدارة وتعديل الطلاب</button>
-      </li>
-      <li class="nav-item">
-        <button class="nav-link" onclick="switchSection('analyticsSection')"><i class="fas fa-chart-line me-1"></i> الإحصائيات والنسب</button>
-      </li>
-      <li class="nav-item">
-        <button class="nav-link" onclick="switchSection('promotionSection')"><i class="fas fa-arrow-up-right-dots me-1"></i> ترقية الفرق الدراسية</button>
-      </li>
-    </ul>
-
-    <!-- ==================== 1. ماسح الحضور ==================== -->
-    <div id="scannerSection" class="section-pane">
-      <div class="main-card">
-        <h5 class="fw-bold text-primary mb-3"><i class="fas fa-filter me-2"></i> تحديد المحاضرة طبقاً للائحة الجديدة</h5>
-        
-        <div class="row g-3">
-          <div class="col-md-6">
-            <label class="form-label fw-bold">الخطوة الأولى: اختر الفرقة الدراسية</label>
-            <select id="scanGrade" class="form-select" onchange="loadCurriculumSubjects()">
-              <option value="">-- اختر الفرقة --</option>
-              <option value="الفرقة الأولى">الفرقة الأولى</option>
-              <option value="الفرقة الثانية">الفرقة الثانية</option>
-              <option value="الفرقة الثالثة">الفرقة الثالثة</option>
-              <option value="الفرقة الرابعة">الفرقة الرابعة</option>
-            </select>
-          </div>
-          <div class="col-md-6">
-            <label class="form-label fw-bold">الخطوة الثانية: اختر الترم</label>
-            <select id="scanTerm" class="form-select" onchange="loadCurriculumSubjects()">
-              <option value="">-- اختر الترم --</option>
-              <option value="ترم أول">ترم أول</option>
-              <option value="ترم ثاني">ترم ثاني</option>
-            </select>
-          </div>
-        </div>
-
-        <div id="subjectsBox" class="mt-4" style="display:none;">
-          <label class="form-label fw-bold text-primary mb-2">الخطوة الثالثة: اختر المادة لتشغيل الكاميرا ورصد الحضور</label>
-          <div class="row g-3" id="subjectsGrid"></div>
-        </div>
-      </div>
-
-      <div class="main-card text-center" id="cameraBox" style="display:none;">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-          <h5 class="fw-bold text-success mb-0" id="activeSubjLabel">المحاضرة الحالية</h5>
-          <button class="btn btn-sm btn-outline-danger" onclick="stopScanner()"><i class="fas fa-stop me-1"></i> إيقاف الكاميرا</button>
-        </div>
-
-        <div id="reader"></div>
-        <div id="scanStatusBox" class="mt-3"></div>
-
-        <div class="mt-4 text-start">
-          <h6 class="fw-bold text-secondary mb-2"><i class="fas fa-history me-1"></i> سجل الحضور الممسوح في هذه الجلسة</h6>
-          <div id="scanSessionLog" style="max-height: 240px; overflow-y: auto;"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ==================== 2. إدارة وتعديل الطلاب ==================== -->
-    <div id="studentsSection" class="section-pane" style="display:none;">
-      <div class="main-card">
-        <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-          <h5 class="fw-bold text-primary mb-0"><i class="fas fa-users-gear me-2"></i> سجلات الطلاب المسجلين بالكلية</h5>
-          <div class="d-flex gap-2">
-            <input type="text" id="stdSearch" class="form-control" placeholder="بحث بالاسم أو الكود..." onkeyup="fetchStudentsData()">
-            <select id="stdFilterGrade" class="form-select" onchange="fetchStudentsData()">
-              <option value="">كل الفرق</option>
-              <option value="الفرقة الأولى">الفرقة الأولى</option>
-              <option value="الفرقة الثانية">الفرقة الثانية</option>
-              <option value="الفرقة الثالثة">الفرقة الثالثة</option>
-              <option value="الفرقة الرابعة">الفرقة الرابعة</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="table-responsive">
-          <table class="table table-hover align-middle">
-            <thead class="table-light">
-              <tr>
-                <th>كود الطالب</th>
-                <th>الاسم بالكامل</th>
-                <th>نوع القيد</th>
-                <th>الحالة</th>
-                <th>الفرقة الدراسية</th>
-                <th>الحالة</th>
-                <th>إجراء</th>
-              </tr>
-            </thead>
-            <tbody id="studentsTableBody"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- ==================== 3. الإحصائيات الشاملة ==================== -->
-    <div id="analyticsSection" class="section-pane" style="display:none;">
       
-      <!-- كروت الإحصاء العامة -->
-      <div class="row g-3 mb-4">
-        <div class="col-md-3 col-6">
-          <div class="stat-card" style="background: linear-gradient(135deg, #1e3a8a, #3b82f6);">
-            <div class="val" id="stTotalStudents">0</div>
-            <div class="lbl">إجمالي الطلاب المسجلين</div>
-          </div>
-        </div>
-        <div class="col-md-3 col-6">
-          <div class="stat-card" style="background: linear-gradient(135deg, #065f46, #10b981);">
-            <div class="val" id="stYearAttRate">0%</div>
-            <div class="lbl">نسبة حضور العام الدراسي ككل</div>
-          </div>
-        </div>
-        <div class="col-md-3 col-6">
-          <div class="stat-card" style="background: linear-gradient(135deg, #991b1b, #ef4444);">
-            <div class="val" id="stYearAbsRate">0%</div>
-            <div class="lbl">نسبة غياب العام الدراسي ككل</div>
-          </div>
-        </div>
-        <div class="col-md-3 col-6">
-          <div class="stat-card" style="background: linear-gradient(135deg, #374151, #4b5563);">
-            <div class="val" id="stTotalLogs">0</div>
-            <div class="lbl">إجمالي تسجيلات المحاضرات</div>
-          </div>
+      <div class="mb-4 text-start">
+        <label class="form-label small fw-bold text-secondary">المفتاح السري للوحة التحكم</label>
+        <div class="input-group">
+          <span class="input-group-text bg-light border-end-0 rounded-start-4"><i class="fas fa-key text-muted"></i></span>
+          <input type="password" id="loginKey" class="form-control border-start-0 text-center" placeholder="••••••••••••" required>
         </div>
       </div>
-
-      <!-- نسب الترم الأول والثاني -->
-      <div class="row g-3 mb-4">
-        <div class="col-md-6">
-          <div class="main-card py-3">
-            <h6 class="fw-bold text-primary mb-2"><i class="fas fa-calendar-day me-1"></i> إحصائية الترم الأول</h6>
-            <div class="d-flex justify-content-between align-items-center">
-              <span>نسبة الحضور: <strong class="text-success" id="term1Att">0%</strong></span>
-              <span>نسبة الغياب: <strong class="text-danger" id="term1Abs">0%</strong></span>
-              <span>إجمالي الحضور: <strong id="term1Count">0</strong></span>
-            </div>
-          </div>
-        </div>
-        <div class="col-md-6">
-          <div class="main-card py-3">
-            <h6 class="fw-bold text-primary mb-2"><i class="fas fa-calendar-day me-1"></i> إحصائية الترم الثاني</h6>
-            <div class="d-flex justify-content-between align-items-center">
-              <span>نسبة الحضور: <strong class="text-success" id="term2Att">0%</strong></span>
-              <span>نسبة الغياب: <strong class="text-danger" id="term2Abs">0%</strong></span>
-              <span>إجمالي الحضور: <strong id="term2Count">0</strong></span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- جداول المواد والطلاب -->
-      <div class="row g-4">
-        <div class="col-md-6">
-          <div class="main-card">
-            <h6 class="fw-bold text-primary mb-3"><i class="fas fa-book me-1"></i> نسب حضور وغياب المواد</h6>
-            <div class="table-responsive" style="max-height: 420px; overflow-y: auto;">
-              <table class="table table-sm align-middle">
-                <thead class="table-light"><tr><th>كود</th><th>المادة</th><th>محاضرات</th><th>نسبة الحضور</th><th>نسبة الغياب</th></tr></thead>
-                <tbody id="analyticsSubjsTbody"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-        <div class="col-md-6">
-          <div class="main-card">
-            <h6 class="fw-bold text-primary mb-3"><i class="fas fa-user-check me-1"></i> نسب حضور وغياب كل طالب</h6>
-            <div class="table-responsive" style="max-height: 420px; overflow-y: auto;">
-              <table class="table table-sm align-middle">
-                <thead class="table-light"><tr><th>الاسم</th><th>الفرقة</th><th>محاضرات</th><th>حضور</th><th>غياب</th></tr></thead>
-                <tbody id="analyticsStdsTbody"></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </div>
-
+      
+      <button type="submit" class="btn btn-login w-100" id="btnLogin">
+        <i class="fas fa-unlock me-2"></i> تسجيل الدخول
+      </button>
+    </form>
+    
+    <div class="mt-4 pt-3 border-top">
+      <a href="/" class="small text-decoration-none text-muted">
+        <i class="fas fa-id-card me-1"></i> العودة لبوابة تسجيل الطلاب (Digital ID)
+      </a>
     </div>
-
-    <!-- ==================== 4. ترقية الطلاب ==================== -->
-    <div id="promotionSection" class="section-pane" style="display:none;">
-      <div class="main-card">
-        <h5 class="fw-bold text-primary mb-3"><i class="fas fa-arrow-up-right-dots me-2"></i> ترقية الطلاب نهاية العام الدراسي</h5>
-        <p class="text-muted small">يمكنك اختيار طلاب الفرقة وتحديد الطلاب الناجحين لترقيتهم وتحديث بياناتهم في شيت جوجل فوراً.</p>
-
-        <div class="row g-3 mb-3">
-          <div class="col-md-5">
-            <label class="form-label fw-bold">الفرقة الحالية</label>
-            <select id="prFromGrade" class="form-select" onchange="loadPromoList()">
-              <option value="">-- اختر الفرقة --</option>
-              <option value="الفرقة الأولى">الفرقة الأولى</option>
-              <option value="الفرقة الثانية">الفرقة الثانية</option>
-              <option value="الفرقة الثالثة">الفرقة الثالثة</option>
-            </select>
-          </div>
-          <div class="col-md-5">
-            <label class="form-label fw-bold">الفرقة بعد الترقية</label>
-            <input type="text" id="prToGrade" class="form-control" readonly placeholder="ستحدد تلقائياً">
-          </div>
-          <div class="col-md-2 d-flex align-items-end">
-            <button class="btn btn-success w-100 fw-bold py-2" onclick="confirmPromotion()">
-              <i class="fas fa-check-double me-1"></i> ترقية المحددين
-            </button>
-          </div>
-        </div>
-
-        <div class="table-responsive mt-3">
-          <table class="table table-bordered align-middle">
-            <thead class="table-light">
-              <tr>
-                <th width="40"><input type="checkbox" id="checkMasterPromo" onclick="toggleAllPromoBoxes(this)"></th>
-                <th>كود الطالب</th>
-                <th>الاسم بالكامل</th>
-                <th>نوع القيد</th>
-                <th>الفرقة الحالية</th>
-              </tr>
-            </thead>
-            <tbody id="promoTableBody"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
   </div>
 
-</div>
-
-<script>
-  // تسجيل Service Worker للـ PWA
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').catch(console.error);
-  }
-
-  let adminEmail = '';
-  let activeSubject = null;
-  let scannerInstance = null;
-
-  // لائحة قسم علم الاجتماع - كلية الآداب - جامعة عين شمس (اللائحة الجديدة كاملة)
-  const CURRICULUM = {
-    'الفرقة الأولى': {
-      'ترم أول': [
-        { code: 'IIT110', name: 'مقدمة في التكنولوجيا والمعلومات (متطلب جامعة)' },
-        { code: 'EUR110', name: 'لغة أوروبية 1' },
-        { code: 'soc111', name: 'مدخل إلى علم الاجتماع' },
-        { code: 'soc112', name: 'علم النفس الاجتماعي' },
-        { code: 'soc113', name: 'علم الاجتماع والذكاء الاصطناعي' },
-        { code: 'soc114', name: 'مبادئ إحصاء اجتماعي' },
-        { code: 'soc115', name: 'فلسفة حديثة' },
-        { code: 'soc116', name: 'مجتمع عربي معاصر (اختياري)' },
-        { code: 'soc117', name: 'المرأة والمجتمع (اختياري)' },
-        { code: 'soc118', name: 'مهارات التفكير العلمي (اختياري)' }
-      ],
-      'ترم ثاني': [
-        { code: 'AEA120', name: 'الفن المصري القديم (متطلب جامعة)' },
-        { code: 'Arb120', name: 'لغة عربية 1' },
-        { code: 'soc121', name: 'الفكر الاجتماعي بين الأصالة والمعاصرة' },
-        { code: 'soc122', name: 'بناء المجتمع المصري' },
-        { code: 'soc123', name: 'مقدمة في الأنثروبولوجيا' },
-        { code: 'soc124', name: 'الأسرة المصرية المعاصرة' },
-        { code: 'soc125', name: 'علم اجتماع مسنين تدريب ميداني' },
-        { code: 'soc126', name: 'التغير الاجتماعي (اختياري)' },
-        { code: 'soc127', name: 'علم اجتماع تربية (اختياري)' },
-        { code: 'soc128', name: 'علم اجتماع سكاني (اختياري)' }
-      ]
-    },
-    'الفرقة الثانية': {
-      'ترم أول': [
-        { code: 'soc210', name: 'قضايا مجتمعية (متطلب جامعة)' },
-        { code: 'EUR210', name: 'لغة أوروبية 2' },
-        { code: 'soc211', name: 'علم الاجتماع الاقتصادي' },
-        { code: 'soc212', name: 'الإحصاء الاجتماعي التطبيقي' },
-        { code: 'soc213', name: 'علم اجتماع الثقافة' },
-        { code: 'soc214', name: 'قضايا الطفولة المعاصرة' },
-        { code: 'soc215', name: 'العولمة والمجتمع' },
-        { code: 'soc216', name: 'الشباب والمجتمع (اختياري)' },
-        { code: 'soc217', name: 'الاستشارات الأسرية (اختياري)' },
-        { code: 'soc218', name: 'علم اجتماع ريفي (اختياري)' }
-      ],
-      'ترم ثاني': [
-        { code: 'CIA220', name: 'الفن القبطي والإسلامي (متطلب جامعة)' },
-        { code: 'Arb220', name: 'لغة عربية 2' },
-        { code: 'soc221', name: 'علم الاجتماع الإعلامي' },
-        { code: 'soc222', name: 'علم الاجتماع الأمني' },
-        { code: 'soc223', name: 'نصوص اجتماعية بلغة أوروبية 1' },
-        { code: 'soc224', name: 'الفن والمجتمع' },
-        { code: 'soc225', name: 'الفئات الاجتماعية الخاصة تدريب ميداني' },
-        { code: 'soc226', name: 'نماذج تنموية عالمية (اختياري)' },
-        { code: 'soc227', name: 'علم الاجتماع الحياة اليومية (اختياري)' },
-        { code: 'soc228', name: 'علم الاجتماع البيئي (اختياري)' }
-      ]
-    },
-    'الفرقة الثالثة': {
-      'ترم أول': [
-        { code: 'TDC310', name: 'التسامح وحوار الحضارات (متطلب جامعة)' },
-        { code: 'Eur310', name: 'لغة أوروبية 3' },
-        { code: 'soc311', name: 'علم الاجتماع السياسي' },
-        { code: 'soc312', name: 'علم الاجتماع الصناعي' },
-        { code: 'soc313', name: 'البحث الاجتماعي تدريب ميداني' },
-        { code: 'soc314', name: 'القانون والمجتمع' },
-        { code: 'soc315', name: 'الدين والمجتمع (اختياري)' },
-        { code: 'soc316', name: 'علم الاجتماع التنظيمي (اختياري)' },
-        { code: 'soc317', name: 'الدبلوماسية الاجتماعية والعلاقات الدولية (اختياري)' },
-        { code: 'soc318', name: 'المجتمع الحضري الحديث (اختياري)' }
-      ],
-      'ترم ثاني': [
-        { code: 'AAr320', name: 'الفن في عصر النهضة العربية (متطلب جامعة)' },
-        { code: 'Arb320', name: 'لغة عربية 3' },
-        { code: 'soc321', name: 'علم اجتماع الجرائم المستحدثة' },
-        { code: 'soc322', name: 'النظرية في علم الاجتماع' },
-        { code: 'soc323', name: 'علم اجتماع التنمية البشرية الخدمة الاجتماعية تدريب ميداني' },
-        { code: 'soc324', name: 'قضايا النوع الاجتماعي (اختياري)' },
-        { code: 'soc325', name: 'علم الاجتماع السياحي (اختياري)' },
-        { code: 'soc326', name: 'علم اجتماع العلم (اختياري)' },
-        { code: 'soc327', name: 'علم الاجتماع الإقليمي (اختياري)' },
-        { code: 'soc328', name: 'المقررات الاختيارية' }
-      ]
-    },
-    'الفرقة الرابعة': {
-      'ترم أول': [
-        { code: 'CTH410', name: 'التفكير الناقد (متطلب جامعة)' },
-        { code: 'soc411', name: 'المشكلات الاجتماعية' },
-        { code: 'soc412', name: 'المعرفة وبناء المجتمع' },
-        { code: 'soc413', name: 'التخطيط والسياسة الاجتماعية' },
-        { code: 'soc414', name: 'علم الاجتماع الأزمات' },
-        { code: 'soc415', name: 'المجتمع المدني تدريب ميداني' },
-        { code: 'soc416', name: 'المشروعات التنموية تدريب ميداني (اختياري)' },
-        { code: 'soc417', name: 'الرياضة والمجتمع تدريب ميداني (اختياري)' },
-        { code: 'soc418', name: 'علم الاجتماع التطبيقي تدريب ميداني (اختياري)' }
-      ],
-      'ترم ثاني': [
-        { code: 'MEA420', name: 'الفن المصري الحديث (متطلب جامعة)' },
-        { code: 'soc421', name: 'علم اجتماع المستقبل' },
-        { code: 'soc422', name: 'نصوص اجتماعية بلغة أوروبية 2' },
-        { code: 'soc423', name: 'الأمن الإنساني والتنمية المستدامة' },
-        { code: 'soc424', name: 'مشروع التخرج تصميم بحوث' },
-        { code: 'soc425', name: 'سوسيولوجيا الصحة والمرض تدريب ميداني' },
-        { code: 'soc426', name: 'علم اجتماع الإنترنت (اختياري)' },
-        { code: 'soc427', name: 'سوسيولوجيا العمل عن بعد (اختياري)' },
-        { code: 'soc428', name: 'المجتمعات الرقمية الحديثة (اختياري)' }
-      ]
-    }
-  };
-
-  async function handleLogin() {
-    const email = document.getElementById('loginEmail').value.trim();
-    const key = document.getElementById('loginKey').value.trim();
-
-    if (!email || !key) {
-      return Swal.fire('تنبيه', 'يرجى كتابة البريد والمفتاح السري', 'warning');
-    }
-
-    const btn = document.getElementById('btnLogin');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> جاري التحقق...';
-
+  <script>
+    // إذا كان المشرف مسجلاً مسبقاً، تحويله فوراً إلى لوحة التحكم
     try {
-      const res = await fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, key })
-      });
-      const data = await res.json();
-
-      if (data.valid) {
-        adminEmail = data.email;
-        sessionStorage.setItem('soc_admin_session', JSON.stringify({ email: adminEmail }));
-        document.getElementById('adminBadge').innerText = adminEmail;
-
-        // إخفاء شاشة تسجيل الدخول بالكامل وإظهار اللوحة في صفحة مستقلة
-        const loginEl = document.getElementById('loginView');
-        loginEl.classList.remove('d-flex');
-        loginEl.classList.add('d-none');
-        loginEl.style.display = 'none';
-
-        const dashEl = document.getElementById('dashboardApp');
-        dashEl.classList.remove('d-none');
-        dashEl.style.display = 'block';
-        window.scrollTo(0, 0);
-
-        if (data.warning) {
-          const banner = document.getElementById('gasWarningBanner');
-          if (banner) {
-            banner.classList.remove('d-none');
-            document.getElementById('gasWarningText').innerText = data.warning;
-          }
-        }
-
-        fetchStudentsData();
-        fetchAnalyticsData();
-      } else {
-        Swal.fire('خطأ في الدخول', data.message || 'بيانات الدخول غير صحيحة', 'error');
-      }
-    } catch (err) {
-      Swal.fire('خطأ شبكة', err.message, 'error');
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fas fa-unlock me-1"></i> تسجيل الدخول';
-    }
-  }
-
-  function handleLogout() {
-    sessionStorage.removeItem('soc_admin_session');
-    location.reload();
-  }
-
-  // فحص الجلسة السابقة عند تحميل الصفحة
-  document.addEventListener('DOMContentLoaded', () => {
-    try {
-      const saved = sessionStorage.getItem('soc_admin_session');
+      const saved = sessionStorage.getItem('soc_admin_user') || localStorage.getItem('soc_admin_user');
       if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.email) {
-          adminEmail = parsed.email;
-          document.getElementById('adminBadge').innerText = adminEmail;
-          
-          const loginEl = document.getElementById('loginView');
-          loginEl.classList.remove('d-flex');
-          loginEl.classList.add('d-none');
-          loginEl.style.display = 'none';
-
-          const dashEl = document.getElementById('dashboardApp');
-          dashEl.classList.remove('d-none');
-          dashEl.style.display = 'block';
-
-          fetchStudentsData();
-          fetchAnalyticsData();
-        }
-      }
-    } catch (e) {}
-  });
-
-  function switchSection(secId) {
-    document.querySelectorAll('.section-pane').forEach(el => el.style.display = 'none');
-    document.querySelectorAll('#mainTabList .nav-link').forEach(el => el.classList.remove('active'));
-    document.getElementById(secId).style.display = 'block';
-    event.currentTarget.classList.add('active');
-
-    if (secId === 'studentsSection') fetchStudentsData();
-    if (secId === 'analyticsSection') fetchAnalyticsData();
-  }
-
-  function loadCurriculumSubjects() {
-    const grade = document.getElementById('scanGrade').value;
-    const term = document.getElementById('scanTerm').value;
-    const box = document.getElementById('subjectsBox');
-    const grid = document.getElementById('subjectsGrid');
-
-    if (!grade || !term || !CURRICULUM[grade] || !CURRICULUM[grade][term]) {
-      box.style.display = 'none';
-      return;
-    }
-
-    grid.innerHTML = '';
-    const list = CURRICULUM[grade][term];
-    list.forEach(subj => {
-      const col = document.createElement('div');
-      col.className = 'col-md-4 col-sm-6';
-      col.innerHTML = `
-        <div class="subj-pill" onclick="activateScanner('${subj.code}', '${subj.name}', this)">
-          <div><span class="badge bg-secondary mb-1">${subj.code}</span></div>
-          <div class="small fw-bold text-dark">${subj.name}</div>
-        </div>
-      `;
-      grid.appendChild(col);
-    });
-
-    box.style.display = 'block';
-  }
-
-  function activateScanner(code, name, el) {
-    document.querySelectorAll('.subj-pill').forEach(p => p.classList.remove('active'));
-    el.classList.add('active');
-    activeSubject = { code, name };
-
-    document.getElementById('activeSubjLabel').innerText = `المحاضرة: ${name} (${code})`;
-    document.getElementById('cameraBox').style.display = 'block';
-
-    if (scannerInstance) {
-      scannerInstance.clear().catch(console.error);
-    }
-
-    scannerInstance = new Html5QrcodeScanner("reader", {
-      fps: 12,
-      qrbox: 250,
-      rememberLastUsedCamera: true
-    });
-    scannerInstance.render(onScanSuccess);
-  }
-
-  function stopScanner() {
-    if (scannerInstance) {
-      scannerInstance.clear().then(() => {
-        document.getElementById('cameraBox').style.display = 'none';
-      }).catch(console.error);
-    }
-  }
-
-  // صوت التنبيه + النطق الصوتي "تم التسجيل"
-  function playAudioFeedback(type) {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.frequency.setValueAtTime(type === 'success' ? 880 : 320, ctx.currentTime);
-      gain.gain.setValueAtTime(0.3, ctx.currentTime);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.22);
-
-      if (type === 'success' && 'speechSynthesis' in window) {
-        const msg = new SpeechSynthesisUtterance('تم التسجيل');
-        msg.lang = 'ar';
-        window.speechSynthesis.speak(msg);
+        window.location.replace('/dashboard');
       }
     } catch(e) {}
-  }
 
-  let isScanningBlocked = false;
-  async function onScanSuccess(decodedText) {
-    if (!activeSubject || isScanningBlocked) return;
-    isScanningBlocked = true; // منع تكرار قراءة الكاميرا لنفس اللحظة
-
-    const statusBox = document.getElementById('scanStatusBox');
-    statusBox.innerHTML = '<div class="alert alert-info py-2 fw-bold"><span class="spinner-border spinner-border-sm me-2"></span> جاري التحقق من كود الطالب في قاعدة البيانات...</div>';
-
-    try {
-      const res = await fetch('/api/attendance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          qrData: decodedText,
-          selectedGrade: document.getElementById('scanGrade').value,
-          selectedTerm: document.getElementById('scanTerm').value,
-          subjectCode: activeSubject.code,
-          subjectName: activeSubject.name,
-          adminEmail: adminEmail
-        })
-      });
-      const data = await res.json();
-
-      if (data.success) {
-        playAudioFeedback('success');
-        statusBox.innerHTML = `<div class="alert alert-success py-2 fw-bold"><i class="fas fa-check-circle me-1"></i> ${data.message}</div>`;
-        appendSessionLog(data.studentName, data.studentCode, data.time, 'success');
-      } else {
-        playAudioFeedback('error');
-        const alertClass = data.type === 'duplicate' ? 'alert-warning' : 'alert-danger';
-        statusBox.innerHTML = `<div class="alert ${alertClass} py-2 fw-bold"><i class="fas fa-exclamation-triangle me-1"></i> ${data.message}</div>`;
-        appendSessionLog(data.message, '', '', 'error');
-      }
-    } catch (e) {
-      statusBox.innerHTML = `<div class="alert alert-danger py-2 fw-bold">خطأ شبكة: ${e.message}</div>`;
-    } finally {
-      setTimeout(() => { isScanningBlocked = false; }, 2500); // مهلة 2.5 ثانية قبل القراءة التالية
-    }
-  }
-
-  function appendSessionLog(title, code, time, type) {
-    const box = document.getElementById('scanSessionLog');
-    const div = document.createElement('div');
-    div.className = `scan-log-item ${type === 'success' ? 'bg-success-subtle text-success' : 'bg-danger-subtle text-danger'}`;
-    div.innerHTML = `
-      <div><strong>${title}</strong> ${code ? `<code class="ms-1">${code}</code>` : ''}</div>
-      <small>${time || ''}</small>
-    `;
-    box.insertBefore(div, box.firstChild);
-  }
-
-  // ==================== إدارة وتعديل الطلاب ====================
-  async function fetchStudentsData() {
-    const search = document.getElementById('stdSearch').value;
-    const grade = document.getElementById('stdFilterGrade').value;
-
-    const res = await fetch(`/api/students?grade=${encodeURIComponent(grade)}&search=${encodeURIComponent(search)}`);
-    const data = await res.json();
-    const tbody = document.getElementById('studentsTableBody');
-    tbody.innerHTML = '';
-
-    (data.students || []).forEach(s => {
-      tbody.innerHTML += `
-        <tr>
-          <td><code>${s.code}</code></td>
-          <td><strong>${s.name}</strong></td>
-          <td>${s.enrollType}</td>
-          <td>${s.status}</td>
-          <td><span class="badge bg-primary">${s.grade}</span></td>
-          <td><span class="badge ${s.active==='نشط'?'bg-success':'bg-danger'}">${s.active}</span></td>
-          <td>
-            <button class="btn btn-sm btn-outline-primary fw-bold" onclick='openEditStudentModal(${JSON.stringify(s)})'>
-              <i class="fas fa-edit me-1"></i> تعديل
-            </button>
-          </td>
-        </tr>
-      `;
-    });
-  }
-
-  function openEditStudentModal(s) {
-    Swal.fire({
-      title: 'تعديل بيانات الطالب في Google Sheets',
-      html: `
-        <div class="text-start mb-2">
-          <label class="small fw-bold">الاسم رباعي:</label>
-          <input id="swName" class="form-control" value="${s.name}">
-        </div>
-        <div class="text-start mb-2">
-          <label class="small fw-bold">نوع القيد:</label>
-          <select id="swEnroll" class="form-select">
-            <option value="انتظام" ${s.enrollType==='انتظام'?'selected':''}>انتظام</option>
-            <option value="انتساب" ${s.enrollType==='انتساب'?'selected':''}>انتساب</option>
-          </select>
-        </div>
-        <div class="text-start mb-2">
-          <label class="small fw-bold">الحالة:</label>
-          <select id="swStatus" class="form-select">
-            <option value="عام" ${s.status==='عام'?'selected':''}>عام</option>
-            <option value="حالات خاصة" ${s.status==='حالات خاصة'?'selected':''}>حالات خاصة</option>
-            <option value="إبصار" ${s.status==='إبصار'?'selected':''}>إبصار</option>
-          </select>
-        </div>
-        <div class="text-start mb-2">
-          <label class="small fw-bold">الفرقة الدراسية:</label>
-          <select id="swGrade" class="form-select">
-            <option value="الفرقة الأولى" ${s.grade==='الفرقة الأولى'?'selected':''}>الفرقة الأولى</option>
-            <option value="الفرقة الثانية" ${s.grade==='الفرقة الثانية'?'selected':''}>الفرقة الثانية</option>
-            <option value="الفرقة الثالثة" ${s.grade==='الفرقة الثالثة'?'selected':''}>الفرقة الثالثة</option>
-            <option value="الفرقة الرابعة" ${s.grade==='الفرقة الرابعة'?'selected':''}>الفرقة الرابعة</option>
-          </select>
-        </div>
-      `,
-      showCancelButton: true,
-      confirmButtonText: 'حفظ وتحديث الشيت',
-      cancelButtonText: 'إلغاء'
-    }).then(async res => {
-      if (res.isConfirmed) {
-        Swal.fire({ title: 'جاري التحديث في جوجل شيت...', didOpen: () => Swal.showLoading() });
-        const upRes = await fetch('/api/students', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            code: s.code,
-            name: document.getElementById('swName').value,
-            enrollType: document.getElementById('swEnroll').value,
-            status: document.getElementById('swStatus').value,
-            grade: document.getElementById('swGrade').value
-          })
-        });
-        const upData = await upRes.json();
-        if (upData.success) {
-          Swal.fire('تم التعديل!', 'تم تعديل بيانات الطالب في شيت جوجل بنجاح وتحديث الـ QR', 'success');
-          fetchStudentsData();
-        } else {
-          Swal.fire('خطأ', upData.error, 'error');
-        }
-      }
-    });
-  }
-
-  // ==================== الإحصائيات الشاملة ====================
-  async function fetchAnalyticsData() {
-    try {
-      const res = await fetch('/api/analytics');
-      const data = await res.json();
-      if (!data.success) return;
-
-      document.getElementById('stTotalStudents').innerText = data.totalStudents;
-      document.getElementById('stYearAttRate').innerText = data.yearAttRate + '%';
-      document.getElementById('stYearAbsRate').innerText = data.yearAbsRate + '%';
-      document.getElementById('stTotalLogs').innerText = data.totalLogs;
-
-      if (data.termStats) {
-        document.getElementById('term1Att').innerText = (data.termStats['ترم أول']?.rate || 0) + '%';
-        document.getElementById('term1Abs').innerText = (data.termStats['ترم أول']?.absRate || 0) + '%';
-        document.getElementById('term1Count').innerText = data.termStats['ترم أول']?.attended || 0;
-
-        document.getElementById('term2Att').innerText = (data.termStats['ترم ثاني']?.rate || 0) + '%';
-        document.getElementById('term2Abs').innerText = (data.termStats['ترم ثاني']?.absRate || 0) + '%';
-        document.getElementById('term2Count').innerText = data.termStats['ترم ثاني']?.attended || 0;
-      }
-
-      // جدول المواد
-      const subBody = document.getElementById('analyticsSubjsTbody');
-      subBody.innerHTML = '';
-      data.subjects.forEach(s => {
-        const badgeClass = s.attendanceRate >= 70 ? 'badge-high' : (s.attendanceRate >= 50 ? 'badge-mid' : 'badge-low');
-        subBody.innerHTML += `
-          <tr>
-            <td><code>${s.code}</code></td>
-            <td><strong>${s.name}</strong></td>
-            <td>${s.sessions}</td>
-            <td><span class="${badgeClass}">${s.attendanceRate}%</span></td>
-            <td><span class="text-danger fw-bold">${s.absenceRate}%</span></td>
-          </tr>
-        `;
-      });
-
-      // جدول الطلاب
-      const stdBody = document.getElementById('analyticsStdsTbody');
-      stdBody.innerHTML = '';
-      data.students.forEach(st => {
-        const badgeClass = st.attRate >= 70 ? 'badge-high' : (st.attRate >= 50 ? 'badge-mid' : 'badge-low');
-        stdBody.innerHTML += `
-          <tr>
-            <td><strong>${st.name}</strong></td>
-            <td><span class="badge bg-secondary">${st.grade}</span></td>
-            <td>${st.attended} / ${st.totalPossible}</td>
-            <td><span class="${badgeClass}">${st.attRate}%</span></td>
-            <td><span class="text-danger fw-bold">${st.absRate}%</span></td>
-          </tr>
-        `;
-      });
-    } catch(e) { console.error(e); }
-  }
-
-  // ==================== ترقية الطلاب ====================
-  async function loadPromoList() {
-    const fromG = document.getElementById('prFromGrade').value;
-    const map = {
-      'الفرقة الأولى': 'الفرقة الثانية',
-      'الفرقة الثانية': 'الفرقة الثالثة',
-      'الفرقة الثالثة': 'الفرقة الرابعة'
-    };
-    document.getElementById('prToGrade').value = map[fromG] || '';
-
-    const res = await fetch(`/api/students?grade=${encodeURIComponent(fromG)}`);
-    const data = await res.json();
-    const tbody = document.getElementById('promoTableBody');
-    tbody.innerHTML = '';
-
-    (data.students || []).forEach(s => {
-      tbody.innerHTML += `
-        <tr>
-          <td><input type="checkbox" class="promo-item-chk" value="${s.code}"></td>
-          <td><code>${s.code}</code></td>
-          <td><strong>${s.name}</strong></td>
-          <td>${s.enrollType}</td>
-          <td><span class="badge bg-primary">${s.grade}</span></td>
-        </tr>
-      `;
-    });
-  }
-
-  function toggleAllPromoBoxes(master) {
-    document.querySelectorAll('.promo-item-chk').forEach(c => c.checked = master.checked);
-  }
-
-  async function confirmPromotion() {
-    const toGrade = document.getElementById('prToGrade').value;
-    const selectedCodes = Array.from(document.querySelectorAll('.promo-item-chk:checked')).map(c => c.value);
-
-    if (!toGrade || selectedCodes.length === 0) {
-      return Swal.fire('تنبيه', 'يرجى اختيار الفرقة الحالية وتحديد طالب واحد على الأقل للترقية', 'warning');
+    // تسجيل وتحديث Service Worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').then(reg => {
+        reg.update();
+      }).catch(console.error);
     }
 
-    Swal.fire({
-      title: 'تأكيد ترقية الطلاب',
-      html: `هل أنت متأكد من ترقية <strong>${selectedCodes.length}</strong> طالب إلى <strong>${toGrade}</strong> في قاعدة البيانات؟`,
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonText: 'نعم، نفّذ الترقية في الشيت',
-      cancelButtonText: 'إلغاء'
-    }).then(async r => {
-      if (r.isConfirmed) {
-        Swal.fire({ title: 'جاري الترقية وتحديث الشيت...', didOpen: () => Swal.showLoading() });
-        const res = await fetch('/api/promote', {
+    async function handleLogin() {
+      const email = document.getElementById('loginEmail').value.trim();
+      const key = document.getElementById('loginKey').value.trim();
+
+      if (!email || !key) {
+        return Swal.fire('تنبيه', 'يرجى كتابة البريد والمفتاح السري', 'warning');
+      }
+
+      const btn = document.getElementById('btnLogin');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> جاري التحقق...';
+
+      try {
+        const res = await fetch('/api/auth', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ studentCodes: selectedCodes, targetGrade: toGrade })
+          body: JSON.stringify({ email, key })
         });
-        const d = await res.json();
+        const data = await res.json();
 
-        if (d.success) {
-          Swal.fire('تمت الترقية بنجاح!', d.message, 'success');
-          loadPromoList();
+        if (data.valid) {
+          const userObj = {
+            email: data.email,
+            role: data.role || 'super_admin',
+            warning: data.warning || '',
+            ts: Date.now()
+          };
+          sessionStorage.setItem('soc_admin_user', JSON.stringify(userObj));
+          localStorage.setItem('soc_admin_user', JSON.stringify(userObj));
+
+          // تحويل مباشر وسريع إلى صفحة اللوحة المستقلة
+          window.location.replace('/dashboard');
         } else {
-          Swal.fire('خطأ', d.error, 'error');
+          Swal.fire('خطأ في الدخول', data.message || 'بيانات الدخول غير صحيحة', 'error');
         }
+      } catch (err) {
+        Swal.fire('خطأ اتصال', err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-unlock me-2"></i> تسجيل الدخول';
       }
-    });
-  }
-</script>
+    }
+  </script>
 </body>
 </html>

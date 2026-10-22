@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>تسجيل الطلاب وكارنيه QR - علم الاجتماع (جامعة عين شمس)</title>
+  
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <style>
+    * { font-family: 'Cairo', sans-serif; box-sizing: border-box; }
+    body { background: #eef2f7; min-height: 100vh; padding-bottom: 60px; color: #2d3748; }
+
+    .header-hero {
+      background: linear-gradient(135deg, #0d47a1 0%, #1a237e 60%, #283593 100%);
+      color: white;
+      padding: 45px 20px 50px;
+      text-align: center;
+      border-radius: 0 0 40px 40px;
+      box-shadow: 0 10px 30px rgba(13, 71, 161, 0.25);
+      position: relative;
+    }
+    .header-hero .badge-tag {
+      background: rgba(255, 255, 255, 0.18);
+      backdrop-filter: blur(5px);
+      padding: 8px 18px;
+      border-radius: 50px;
+      font-size: 0.9rem;
+      display: inline-block;
+      margin-bottom: 15px;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+    }
+
+    .form-card {
+      background: #ffffff;
+      border-radius: 24px;
+      padding: 35px 30px;
+      box-shadow: 0 15px 40px rgba(0, 0, 0, 0.08);
+      max-width: 540px;
+      margin: -35px auto 30px;
+      position: relative;
+      z-index: 2;
+    }
+    .form-card h4 {
+      color: #1a237e;
+      font-weight: 800;
+      margin-bottom: 25px;
+      text-align: center;
+    }
+
+    .form-label {
+      font-weight: 700;
+      font-size: 0.95rem;
+      margin-bottom: 8px;
+      color: #1a237e;
+    }
+    .form-control, .form-select {
+      border: 2px solid #e2e8f0;
+      border-radius: 14px;
+      padding: 12px 16px;
+      font-size: 1rem;
+      transition: all 0.25s ease;
+    }
+    .form-control:focus, .form-select:focus {
+      border-color: #1a237e;
+      box-shadow: 0 0 0 4px rgba(26, 35, 126, 0.12);
+    }
+
+    .btn-submit {
+      background: linear-gradient(135deg, #1a237e, #0d47a1);
+      color: white;
+      font-weight: 800;
+      padding: 14px;
+      border-radius: 14px;
+      border: none;
+      width: 100%;
+      font-size: 1.1rem;
+      transition: all 0.3s ease;
+      box-shadow: 0 6px 20px rgba(26, 35, 126, 0.3);
+    }
+    .btn-submit:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(26, 35, 126, 0.4);
+      color: white;
+    }
+
+    /* كارنيه الكلية الرقمي المعتمد */
+    .id-card-wrapper {
+      max-width: 480px;
+      margin: -35px auto 30px;
+      display: none;
+    }
+    .id-card {
+      background: #ffffff;
+      border: 2px solid #1a237e;
+      border-radius: 28px;
+      padding: 0;
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(26, 35, 126, 0.2);
+      position: relative;
+    }
+    .id-card-top {
+      background: linear-gradient(135deg, #1a237e, #0d47a1);
+      color: white;
+      padding: 22px 20px;
+      text-align: center;
+      position: relative;
+    }
+    .id-card-top h6 { font-size: 0.95rem; margin-bottom: 4px; opacity: 0.9; }
+    .id-card-top h4 { font-weight: 900; margin-bottom: 2px; }
+    .id-card-top .sub-sub { font-size: 0.8rem; opacity: 0.8; }
+
+    .id-card-body {
+      padding: 25px 25px 20px;
+      text-align: center;
+      background: #ffffff;
+    }
+
+    .qr-container {
+      background: #ffffff;
+      padding: 14px;
+      border-radius: 20px;
+      border: 2px dashed #cbd5e1;
+      display: inline-block;
+      margin-bottom: 15px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.04);
+    }
+
+    .student-code-badge {
+      background: #e8eaf6;
+      color: #1a237e;
+      font-weight: 900;
+      font-size: 1.25rem;
+      padding: 8px 20px;
+      border-radius: 50px;
+      display: inline-block;
+      letter-spacing: 1px;
+      margin-bottom: 20px;
+      border: 1px solid #c5cae9;
+    }
+
+    .student-info-grid {
+      text-align: right;
+      background: #f8fafc;
+      border-radius: 18px;
+      padding: 16px 20px;
+      border: 1px solid #e2e8f0;
+      margin-bottom: 15px;
+    }
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px solid #edf2f7;
+      font-size: 0.95rem;
+    }
+    .info-row:last-child { border-bottom: none; }
+    .info-label { color: #64748b; font-weight: 600; }
+    .info-val { color: #0f172a; font-weight: 800; }
+
+    .id-card-footer {
+      background: #f1f5f9;
+      padding: 10px 20px;
+      font-size: 0.8rem;
+      color: #475569;
+      border-top: 1px solid #e2e8f0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .action-btn-group {
+      display: flex;
+      gap: 12px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+    .action-btn-group .btn {
+      flex: 1;
+      min-width: 140px;
+      padding: 12px;
+      border-radius: 14px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- رأس الصفحة الرئيسي -->
+<div class="header-hero">
+  <div class="badge-tag">
+    <i class="fas fa-university me-1"></i> جامعة عين شمس • كلية الآداب
+  </div>
+  <h2 class="fw-bold mb-2">قسم علم الاجتماع (اللائحة الجديدة)</h2>
+  <p class="mb-0 opacity-75">منظومة التسجيل واستخراج بطاقة الحضور الذكية بالـ QR Code</p>
+</div>
+
+<div class="container">
+  
+  <!-- استمارة قيد الطالب -->
+  <div class="form-card" id="formSection">
+    <h4><i class="fas fa-id-card-clip me-2 text-primary"></i> تسجيل بيانات طالب</h4>
+    
+    <div class="mb-3">
+      <label class="form-label">الاسم بالكامل (رباعي) <span class="text-danger">*</span></label>
+      <input type="text" id="inName" class="form-control" placeholder="اكتب اسمك كاملاً كما هو مقيد بالكلية">
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">نوع القيد <span class="text-danger">*</span></label>
+      <select id="inEnroll" class="form-select">
+        <option value="انتظام">انتظام</option>
+        <option value="انتساب">انتساب</option>
+      </select>
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">الحالة <span class="text-danger">*</span></label>
+      <select id="inStatus" class="form-select">
+        <option value="عام">عام</option>
+        <option value="حالات خاصة">حالات خاصة</option>
+        <option value="إبصار">إبصار</option>
+      </select>
+    </div>
+
+    <div class="mb-4">
+      <label class="form-label">الفرقة الدراسية <span class="text-danger">*</span></label>
+      <select id="inGrade" class="form-select">
+        <option value="الفرقة الأولى">الفرقة الأولى</option>
+        <option value="الفرقة الثانية">الفرقة الثانية</option>
+        <option value="الفرقة الثالثة">الفرقة الثالثة</option>
+        <option value="الفرقة الرابعة">الفرقة الرابعة</option>
+      </select>
+    </div>
+
+    <button class="btn btn-submit" id="btnRegister" onclick="registerStudent()">
+      <i class="fas fa-qrcode me-2"></i> تأكيد التسجيل واستخراج الكارنيه
+    </button>
+  </div>
+
+  <!-- عرض الكارنيه الرقمي الناتج -->
+  <div class="id-card-wrapper" id="cardSection">
+    
+    <div class="id-card" id="digitalCard">
+      <div class="id-card-top">
+        <h6>جامعة عين شمس - كلية الآداب</h6>
+        <h4>قسم علم الاجتماع</h4>
+        <div class="sub-sub">اللائحة الجديدة • بطاقة حضور المحاضرات الرقمية</div>
+      </div>
+
+      <div class="id-card-body">
+        <div class="qr-container">
+          <div id="qrCodeTarget"></div>
+        </div>
+
+        <h3 class="fw-bold text-dark mb-1" id="resName">--</h3>
+        <div class="student-code-badge" id="resCode">--</div>
+
+        <div class="student-info-grid">
+          <div class="info-row">
+            <span class="info-label">الفرقة الدراسية:</span>
+            <span class="info-val" id="resGrade">--</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">نوع القيد:</span>
+            <span class="info-val" id="resEnroll">--</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">الحالة:</span>
+            <span class="info-val" id="resStatus">--</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">العام الجامعي:</span>
+            <span class="info-val" id="resYear">2026 / 2027</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="id-card-footer">
+        <span><i class="fas fa-shield-check text-success me-1"></i> معتمد رسمياً لرصد الحضور</span>
+        <span class="fw-bold">SOC-ASU</span>
+      </div>
+    </div>
+
+    <!-- أزرار الإجراءات -->
+    <div class="action-btn-group">
+      <button class="btn btn-success shadow-sm" onclick="downloadCardImage()">
+        <i class="fas fa-download"></i> حفظ كصورة (PNG)
+      </button>
+      <button class="btn btn-primary shadow-sm" onclick="takeScreenshot()">
+        <i class="fas fa-camera"></i> لقطة شاشة
+      </button>
+      <button class="btn btn-outline-secondary" onclick="resetForm()">
+        <i class="fas fa-user-plus"></i> تسجيل طالب آخر
+      </button>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+  async function registerStudent() {
+    const name = document.getElementById('inName').value.trim();
+    const enrollType = document.getElementById('inEnroll').value;
+    const status = document.getElementById('inStatus').value;
+    const grade = document.getElementById('inGrade').value;
+
+    if (!name) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'تنبيه',
+        text: 'يرجى كتابة الاسم بالكامل رباعياً',
+        confirmButtonColor: '#1a237e'
+      });
+      return;
+    }
+
+    const btn = document.getElementById('btnRegister');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> جاري التسجيل وتوليد الـ QR...';
+
+    try {
+      const res = await fetch('/api/students', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, enrollType, status, grade })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        document.getElementById('formSection').style.display = 'none';
+        document.getElementById('cardSection').style.display = 'block';
+
+        document.getElementById('resName').innerText = name;
+        document.getElementById('resCode').innerText = data.studentCode;
+        document.getElementById('resGrade').innerText = grade;
+        document.getElementById('resEnroll').innerText = enrollType;
+        document.getElementById('resStatus').innerText = status;
+
+        // توليد الـ QR بدقة عالية
+        const qrBox = document.getElementById('qrCodeTarget');
+        qrBox.innerHTML = '';
+        new QRCode(qrBox, {
+          text: data.qrData,
+          width: 180,
+          height: 180,
+          colorDark: "#1a237e",
+          colorLight: "#ffffff",
+          correctLevel: QRCode.CorrectLevel.H
+        });
+
+        Swal.fire({
+          icon: 'success',
+          title: 'تم التسجيل بنجاح!',
+          text: 'تم إنشاء الكارنيه وتوثيق بياناتك في شيت الكلية. احفظ الكارنيه الآن لاستخدامه في المحاضرات.',
+          confirmButtonColor: '#1a237e'
+        });
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'خطأ',
+          text: data.error || 'تعذر تسجيل البيانات',
+          confirmButtonColor: '#1a237e'
+        });
+      }
+    } catch (err) {
+      Swal.fire({
+        icon: 'error',
+        title: 'خطأ اتصال',
+        text: 'تعذر الاتصال بالسيرفر: ' + err.message,
+        confirmButtonColor: '#1a237e'
+      });
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-qrcode me-2"></i> تأكيد التسجيل واستخراج الكارنيه';
+    }
+  }
+
+  // حفظ الكارنيه كصورة عالية الدقة PNG
+  function downloadCardImage() {
+    Swal.fire({
+      title: 'جاري إنشاء الصورة...',
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading()
+    });
+
+    const card = document.getElementById('digitalCard');
+    html2canvas(card, {
+      scale: 3,
+      useCORS: true,
+      backgroundColor: null
+    }).then(canvas => {
+      Swal.close();
+      const code = document.getElementById('resCode').innerText;
+      const link = document.createElement('a');
+      link.download = `كارنيه_حضور_${code}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }).catch(err => {
+      Swal.close();
+      Swal.fire('خطأ', 'تعذر تحميل الصورة: ' + err.message, 'error');
+    });
+  }
+
+  // التقاط لقطة شاشة
+  function takeScreenshot() {
+    Swal.fire({
+      title: 'جاري التقاط لقطة الشاشة...',
+      allowOutsideClick: false,
+      didOpen: () => Swal.showLoading()
+    });
+
+    html2canvas(document.body, {
+      scale: 2,
+      useCORS: true
+    }).then(canvas => {
+      Swal.close();
+      const code = document.getElementById('resCode').innerText;
+      const link = document.createElement('a');
+      link.download = `لقطة_شاشة_كارنيه_${code}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }).catch(err => {
+      Swal.close();
+      Swal.fire('خطأ', 'تعذر أخذ لقطة الشاشة', 'error');
+    });
+  }
+
+  function resetForm() {
+    document.getElementById('inName').value = '';
+    document.getElementById('cardSection').style.display = 'none';
+    document.getElementById('formSection').style.display = 'block';
+  }
+</script>
+</body>
+</html>

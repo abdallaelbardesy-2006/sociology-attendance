@@ -1,0 +1,14 @@
+{
+  "name": "sociology-attendance-pwa",
+  "version": "2.0.0",
+  "private": true,
+  "description": "نظام تسجيل الحضور والغياب الذكي بـ QR Code - قسم علم الاجتماع كلية الآداب جامعة عين شمس (اللائحة الجديدة)",
+  "main": "api/attendance.js",
+  "scripts": {
+    "start": "vercel dev"
+  },
+  "dependencies": {
+    "google-auth-library": "^9.6.3",
+    "googleapis": "^134.0.0"
+  }
+}

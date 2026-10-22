@@ -26,13 +26,13 @@ async function callGasApi(action, payload = {}) {
 
   const text = await response.text();
 
-  // فحص الأخطاء الشائعة من جوجل لتقديم رسالة واضحة للمستخدم
-  if (response.status === 404 || text.includes('الملف الذي طلبته غير موجود') || text.includes('not found')) {
-    throw new Error('رابط الـ Web App مقيد الصلاحيات أو غير موجود. تأكد من ضبط Who has access: Anyone.');
+  // فحص الأخطاء بدقة (فحص doPost أولاً لمنع الخلط مع خطأ 404)
+  if (text.includes('doPost') || text.includes('تعذر العثور على دالة') || text.includes('Script function not found')) {
+    throw new Error('الكود في Google Apps Script لم يتم تحديث نسخته المنشورة (doPost غير موجودة في الإصدار الحالي).');
   }
 
-  if (text.includes('doPost') || text.includes('تعذر العثور على دالة النص البرمجي')) {
-    throw new Error('نسخة الكود المنشورة في Apps Script قديمة أو لم يتم حفظها. في Apps Script: احفظ الكود واضغط Deploy -> Manage deployments -> تعديل القلم -> اختر New version واضغط Deploy.');
+  if (response.status === 404 || text.includes('الملف الذي طلبته غير موجود') || text.includes('Page Not Found') || text.includes('not found')) {
+    throw new Error('رابط الـ Web App مقيد الصلاحيات أو غير موجود. تأكد من ضبط Who has access: Anyone.');
   }
 
   try {

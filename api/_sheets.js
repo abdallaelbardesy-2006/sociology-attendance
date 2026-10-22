@@ -5,6 +5,16 @@ const fs = require('fs');
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
 const SPREADSHEET_ID = (process.env.GOOGLE_SHEET_ID || '1lOvjgilrsXCeTWK5gvn9NTeb-gx4EuSE-cSOpu6UmFQ').trim();
 
+// تنظيف اسم المادة ليناسب شروط أسماء التبويبات في جوجل شيت
+function getSubjectSheetName(code, name) {
+  const safeName = (name || '').replace(/[\[\]*?:/\\]/g, ' ').replace(/\s+/g, ' ').trim();
+  let tabTitle = `${code} - ${safeName}`.trim();
+  if (tabTitle.length > 95) {
+    tabTitle = tabTitle.substring(0, 95);
+  }
+  return tabTitle;
+}
+
 // إنشاء اتصال مباشر مع Google Sheets API
 async function getSheetsClient() {
   let auth;
@@ -38,7 +48,7 @@ async function getSheetsClient() {
   return { sheets, spreadsheetId: SPREADSHEET_ID };
 }
 
-// التأكد من وجود التبويبات والعناوين
+// التأكد من وجود التبويبات الأساسية
 async function ensureSheets(sheets, spreadsheetId) {
   try {
     const meta = await sheets.spreadsheets.get({ spreadsheetId });
@@ -62,7 +72,7 @@ async function ensureSheets(sheets, spreadsheetId) {
       });
     }
 
-    // تهيئة عناوين الأعمدة إن كانت فارغة
+    // تهيئة عناوين ورقة الطلاب
     const sValues = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range: 'Students!A1:H1'
@@ -78,6 +88,7 @@ async function ensureSheets(sheets, spreadsheetId) {
       });
     }
 
+    // تهيئة عناوين ورقة الحضور العام
     const aValues = await sheets.spreadsheets.values.get({
       spreadsheetId,
       range: 'Attendance!A1:I1'
@@ -100,6 +111,42 @@ async function ensureSheets(sheets, spreadsheetId) {
   }
 }
 
+// التأكد من وجود تبويب مادة مخصص وإنشائه تلقائياً مع الترويسة
+async function ensureSubjectSheet(sheets, spreadsheetId, tabTitle) {
+  const meta = await sheets.spreadsheets.get({ spreadsheetId });
+  const existingSheets = (meta.data.sheets || []).map(s => s.properties.title);
+
+  if (!existingSheets.includes(tabTitle)) {
+    // 1. إضافة ورقة المادة
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        requests: [
+          {
+            addSheet: {
+              properties: {
+                title: tabTitle,
+                gridProperties: { frozenRowCount: 1 },
+                tabColor: { red: 0.1, green: 0.25, blue: 0.65 }
+              }
+            }
+          }
+        ]
+      }
+    });
+
+    // 2. كتابة صف العناوين
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `'${tabTitle}'!A1:G1`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [['التاريخ', 'الوقت', 'كود الطالب', 'اسم الطالب', 'الفرقة', 'الترم', 'المسجل/المشرف']]
+      }
+    });
+  }
+}
+
 // 1. تسجيل طالب جديد
 async function registerStudentDirect(payload) {
   const { sheets, spreadsheetId } = await getSheetsClient();
@@ -112,7 +159,6 @@ async function registerStudentDirect(payload) {
 
   if (!name) throw new Error('اسم الطالب مطلوب');
 
-  // جلب عدد الطلاب لتوليد التسلسل
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
     range: 'Students!A:F'
@@ -224,7 +270,6 @@ async function updateStudentDataDirect(code, updated) {
     throw new Error('لم يتم العثور على كود الطالب في الشيت');
   }
 
-  // تحديث الاسم، نوع القيد، الحالة، الفرقة
   const updates = [];
   if (updated.name) updates.push({ range: `Students!B${targetRowIndex}`, values: [[updated.name]] });
   if (updated.enrollType) updates.push({ range: `Students!C${targetRowIndex}`, values: [[updated.enrollType]] });
@@ -243,7 +288,7 @@ async function updateStudentDataDirect(code, updated) {
   return { success: true, message: 'تم تحديث بيانات الطالب في شيت جوجل بنجاح' };
 }
 
-// 4. رصد الحضور
+// 4. رصد الحضور (تسجيل في شيت المادة المخصص + شيت الحضور العام)
 async function recordAttendanceDirect(payload) {
   const { sheets, spreadsheetId } = await getSheetsClient();
   await ensureSheets(sheets, spreadsheetId);
@@ -290,12 +335,25 @@ async function recordAttendanceDirect(payload) {
       return {
         success: false,
         type: 'duplicate',
-        message: `تم تسجيل حضور الطالب ${studentName} في هذه المادة اليوم مسبقاً.`
+        message: `تم تسجيل حضور الطالب ${studentName} في مادة (${subjectName}) اليوم مسبقاً.`
       };
     }
   }
 
-  // إضافة الحضور
+  // أ. إنشاء وحفظ الحضور في التبويب المخصص لهذه المادة تحديداً
+  const subjectTabName = getSubjectSheetName(subjectCode, subjectName);
+  await ensureSubjectSheet(sheets, spreadsheetId, subjectTabName);
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId,
+    range: `'${subjectTabName}'!A:G`,
+    valueInputOption: 'USER_ENTERED',
+    requestBody: {
+      values: [[todayStr, timeStr, studentCode, studentName, grade, term, recordedBy]]
+    }
+  });
+
+  // ب. حفظ الحضور أيضاً في التبويب المركزي Attendance للإحصائيات والتقارير العامة
   await sheets.spreadsheets.values.append({
     spreadsheetId,
     range: 'Attendance!A:I',
@@ -307,9 +365,10 @@ async function recordAttendanceDirect(payload) {
 
   return {
     success: true,
-    message: `تم رصد حضور الطالب: ${studentName}`,
+    message: `تم رصد حضور الطالب: ${studentName} في شيت [${subjectTabName}]`,
     studentName: studentName,
     studentCode: studentCode,
+    subjectTab: subjectTabName,
     time: timeStr
   };
 }
@@ -357,7 +416,6 @@ async function getFullAnalyticsDirect() {
     }
   });
 
-  // حساب نسب المواد
   const subjects = Object.values(subjectsMap).map(s => {
     const attendanceRate = totalStudents > 0 ? Math.min(100, Math.round((s.sessions / (totalStudents * 4)) * 100)) : 0;
     return {
@@ -369,7 +427,6 @@ async function getFullAnalyticsDirect() {
     };
   });
 
-  // حساب نسب الطلاب
   const stdAnalytics = students.map(st => {
     const code = st[5] || '';
     const name = st[1] || '';
@@ -449,5 +506,7 @@ module.exports = {
   recordAttendanceDirect,
   getFullAnalyticsDirect,
   promoteStudentsDirect,
-  callGasApi
+  callGasApi,
+  getSubjectSheetName,
+  ensureSubjectSheet
 };

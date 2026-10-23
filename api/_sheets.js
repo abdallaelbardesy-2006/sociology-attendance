@@ -576,6 +576,27 @@ async function getStudentCard(code) {
   return { success: true, student: studentPublic(s), qrData: sec.buildQrPayload(s.code) };
 }
 
+// حذف طلاب نهائياً من تبويب Students (سجلات الحضور السابقة تبقى كأرشيف)
+async function deleteStudents(actor, codes, ip) {
+  const set = new Set((codes || []).map(c => String(c).trim()).filter(Boolean));
+  if (!set.size) throw new HttpError(400, 'لم يتم تحديد أي طالب');
+  const students = (await readStudents(true)).filter(s => set.has(s.code));
+  if (!students.length) throw new HttpError(404, 'لم يتم العثور على الطلاب المحددين');
+  const { sheets, spreadsheetId } = await ensureSheets();
+  const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties(sheetId,title)' });
+  const tab = (meta.data.sheets || []).find(s => s.properties.title === 'Students');
+  if (!tab) throw new HttpError(500, 'تبويب Students غير موجود');
+  const sheetId = tab.properties.sheetId;
+  // الحذف من الأسفل للأعلى حتى لا تتغير أرقام الصفوف
+  const requests = students.map(s => s.row).sort((a, b) => b - a).map(row => ({
+    deleteDimension: { range: { sheetId, dimension: 'ROWS', startIndex: row - 1, endIndex: row } }
+  }));
+  await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } });
+  studentsCache = { at: 0, list: null };
+  await audit(actor.email, actor.role, 'حذف طلاب', `${students.length}: ${students.map(s => `${s.code} ${s.name}`).join('، ')}`, ip);
+  return { success: true, deleted: students.length, message: `تم حذف ${students.length} طالب من الشيت نهائياً` };
+}
+
 async function promoteStudents(actor, codes, targetGrade, ip) {
   if (!GRADES.includes(targetGrade) && targetGrade !== 'خريج') throw new HttpError(400, 'الفرقة المستهدفة غير صالحة');
   const set = new Set((codes || []).map(c => String(c).trim()));
@@ -954,6 +975,7 @@ module.exports = {
   updateStudent,
   getStudentCard,
   promoteStudents,
+  deleteStudents,
   allowedSubjectsFor,
   recordAttendance,
   getAnalytics,

@@ -68,6 +68,10 @@ function createMockSheets(seed = {}) {
       async batchUpdate({ requestBody }) {
         for (const req of requestBody.requests) {
           if (req.addSheet) addTab(req.addSheet.properties.title);
+          if (req.deleteDimension) {
+            const { sheetId, startIndex, endIndex } = req.deleteDimension.range;
+            for (const [title, m] of meta) if (m.sheetId === sheetId) tabs.get(title).splice(startIndex, endIndex - startIndex);
+          }
           if (req.addProtectedRange) {
             const id = req.addProtectedRange.protectedRange.range.sheetId;
             for (const m of meta.values()) if (m.sheetId === id) m.protectedRanges.push(req.addProtectedRange.protectedRange);

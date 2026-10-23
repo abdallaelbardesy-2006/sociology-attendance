@@ -107,6 +107,7 @@ code { color: var(--brand-700); background: var(--brand-50); padding: 1px 6px; b
 .swal2-popup { border-radius: 20px !important; font-family: 'Cairo', sans-serif !important; }
 .swal2-html-container { text-align: right !important; }
 .swal2-confirm { background: var(--brand-700) !important; border-radius: 12px !important; }
+.swal2-confirm.swal-danger { background: var(--bad) !important; }
 
 .spin { display: inline-block; width: 1em; height: 1em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -2px; }
 @keyframes spin { to { transform: rotate(360deg); } }

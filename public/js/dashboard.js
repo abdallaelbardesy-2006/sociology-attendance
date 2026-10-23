@@ -63,6 +63,7 @@
       this.rows = [];
       this.page = 0;
       this.maxHeight = o.maxHeight;
+      this.onRender = o.onRender;
     }
     setRows(rows) {
       this.rows = rows || [];
@@ -87,7 +88,7 @@
       const slice = rows.slice(this.page * this.pageSize, (this.page + 1) * this.pageSize);
       const head = this.columns.map(c => {
         const arrow = this.sortKey === c.key ? (this.sortDir > 0 ? ' ▲' : ' ▼') : '';
-        return `<th class="${c.sortable === false ? '' : 'sortable'}" data-key="${esc(c.key)}">${esc(c.label)}${arrow}</th>`;
+        return `<th class="${c.sortable === false ? '' : 'sortable'}" data-key="${esc(c.key)}">${c.headerHtml || esc(c.label)}${arrow}</th>`;
       }).join('');
       const body = slice.length ? slice.map(r => `<tr>${this.columns.map(c => `<td>${c.render ? c.render(r) : esc(r[c.key])}</td>`).join('')}</tr>`).join('')
         : `<tr class="empty-row"><td colspan="${this.columns.length}">${esc(this.empty)}</td></tr>`;
@@ -105,6 +106,7 @@
         this.page += parseInt(b.dataset.pg, 10);
         this.render();
       }));
+      if (this.onRender) this.onRender(rows);
     }
   }
 
@@ -673,7 +675,7 @@
   }
 
   // ==================== 3. الطلاب ====================
-  const st = { list: [], q: '', grade: '', enroll: '', status: '', active: '' };
+  const st = { list: [], q: '', grade: '', enroll: '', status: '', active: '', selected: new Set() };
 
   async function renderStudents() {
     main.innerHTML = `
@@ -688,10 +690,30 @@
           <div><label class="form-label">الحالة</label><select class="form-select form-select-sm" id="sStatus">${opts(META.statuses, st.status, 'الكل')}</select></div>
           <div><label class="form-label">الحساب</label><select class="form-select form-select-sm" id="sActive">${opts([{ value: '1', label: 'نشط' }, { value: '0', label: 'موقوف' }], st.active, 'الكل')}</select></div>
         </div>
+        <div id="stBulk" class="alert alert-danger d-none justify-content-between align-items-center flex-wrap gap-2 py-2">
+          <span class="fw-800"><i class="fas fa-square-check me-1"></i> تم تحديد <span id="stSelCount">0</span> طالب</span>
+          <div class="d-flex gap-2"><button class="btn btn-sm btn-light" id="stClearSel">إلغاء التحديد</button><button class="btn btn-sm btn-danger" id="stDeleteSel"><i class="fas fa-trash me-1"></i> حذف المحددين</button></div>
+        </div>
         <div id="stTable">${loadingHtml()}</div>
       </div>`;
 
+    st.selected.clear();
+    let visibleRows = [];
+    const syncSelection = () => {
+      document.getElementById('stSelCount').textContent = st.selected.size;
+      const bulk = document.getElementById('stBulk');
+      bulk.classList.toggle('d-none', st.selected.size === 0);
+      bulk.classList.toggle('d-flex', st.selected.size > 0);
+      const all = document.getElementById('stAll');
+      if (all) {
+        const n = visibleRows.filter(r => st.selected.has(r.code)).length;
+        all.checked = visibleRows.length > 0 && n === visibleRows.length;
+        all.indeterminate = n > 0 && n < visibleRows.length;
+      }
+    };
+
     const table = new Table(document.getElementById('stTable'), [
+      { key: '_sel', label: '', sortable: false, headerHtml: '<input type="checkbox" class="form-check-input" id="stAll" title="تحديد كل الطلاب الظاهرين">', render: r => `<input type="checkbox" class="form-check-input stChk" value="${esc(r.code)}" ${st.selected.has(r.code) ? 'checked' : ''}>` },
       { key: 'code', label: 'الكود', render: r => `<code>${esc(r.code)}</code>` },
       { key: 'name', label: 'الاسم', render: r => `<b>${esc(r.name)}</b>` },
       { key: 'grade', label: 'الفرقة', render: r => `<span class="pill pill-gray">${esc(r.grade)}</span>` },
@@ -703,8 +725,51 @@
           <button class="btn btn-soft" data-st="edit" data-code="${esc(r.code)}" title="تعديل"><i class="fas fa-pen"></i></button>
           <button class="btn btn-soft" data-st="card" data-code="${esc(r.code)}" title="الكارنيه"><i class="fas fa-id-card"></i></button>
           <button class="btn btn-soft ${r.active ? 'text-danger' : 'text-success'}" data-st="toggle" data-code="${esc(r.code)}" title="${r.active ? 'إيقاف' : 'تفعيل'}"><i class="fas ${r.active ? 'fa-ban' : 'fa-check'}"></i></button>
+          <button class="btn btn-soft text-danger" data-st="delete" data-code="${esc(r.code)}" title="حذف نهائي"><i class="fas fa-trash"></i></button>
         </div>` }
-    ], { sortKey: 'code' });
+    ], { sortKey: 'code', onRender: rows => { visibleRows = rows; syncSelection(); } });
+
+    document.getElementById('stTable').addEventListener('change', e => {
+      if (e.target.id === 'stAll') {
+        visibleRows.forEach(r => (e.target.checked ? st.selected.add(r.code) : st.selected.delete(r.code)));
+        document.querySelectorAll('.stChk').forEach(c => { c.checked = e.target.checked; });
+      } else if (e.target.classList.contains('stChk')) {
+        if (e.target.checked) st.selected.add(e.target.value); else st.selected.delete(e.target.value);
+      } else return;
+      syncSelection();
+    });
+    document.getElementById('stClearSel').addEventListener('click', () => {
+      st.selected.clear();
+      document.querySelectorAll('.stChk').forEach(c => { c.checked = false; });
+      syncSelection();
+    });
+    document.getElementById('stDeleteSel').addEventListener('click', () => confirmDelete(st.list.filter(s => st.selected.has(s.code))));
+
+    async function confirmDelete(targets) {
+      if (!targets.length) return;
+      const names = targets.slice(0, 8).map(s => `<li>${esc(s.name)} <code>${esc(s.code)}</code></li>`).join('') + (targets.length > 8 ? `<li>... و ${targets.length - 8} آخرين</li>` : '');
+      const c = await Swal.fire({
+        icon: 'warning',
+        title: 'هل أنت متأكد من الحذف؟',
+        html: `<p>سيتم حذف <b>${targets.length}</b> طالب نهائياً من الشيت، ولن يُقبل كارنيههم بعد ذلك.</p><ul class="small">${names}</ul><p class="small text-muted-2 mb-0">سجلات الحضور السابقة تبقى محفوظة كأرشيف. لا يمكن التراجع عن الحذف.</p>`,
+        showCancelButton: true,
+        confirmButtonText: '<i class="fas fa-trash"></i> نعم، احذف',
+        cancelButtonText: 'إلغاء',
+        focusCancel: true,
+        customClass: { confirmButton: 'swal-danger' },
+        showLoaderOnConfirm: true,
+        preConfirm: async () => {
+          try {
+            return await api('/api/students', { method: 'DELETE', body: { codes: targets.map(s => s.code) } });
+          } catch (err) { Swal.showValidationMessage(err.message); }
+        }
+      });
+      if (c.isConfirmed && c.value) {
+        targets.forEach(s => st.selected.delete(s.code));
+        toast('success', c.value.message);
+        reload();
+      }
+    }
 
     const filtered = () => {
       const q = st.q.trim().toLowerCase();
@@ -726,6 +791,7 @@
       if (!s) return;
       if (b.dataset.st === 'edit') editStudent(s, reload);
       if (b.dataset.st === 'card') showStudentCard(s.code);
+      if (b.dataset.st === 'delete') confirmDelete([s]);
       if (b.dataset.st === 'toggle') {
         const c = await Swal.fire({ icon: 'warning', title: s.active ? 'إيقاف الطالب؟' : 'تفعيل الطالب؟', text: s.active ? `لن يتم قبول كارنيه ${s.name} في أي محاضرة حتى يعاد تفعيله.` : '', showCancelButton: true, confirmButtonText: 'تأكيد', cancelButtonText: 'إلغاء' });
         if (!c.isConfirmed) return;

@@ -34,7 +34,7 @@ function client() {
   console.log('\n[1] حماية الـ API بدون تسجيل دخول');
   for (const [m, p, b] of [['GET', '/api/analytics'], ['GET', '/api/analytics?userRole=super_admin'], ['GET', '/api/students'], ['GET', '/api/admins?requesterEmail=abdalla.elbardesy1@gmail.com'],
     ['POST', '/api/attendance', { qrData: 'x', subjectCode: 'soc111' }], ['POST', '/api/promote', { studentCodes: ['a'], targetGrade: 'الفرقة الثانية' }], ['POST', '/api/setup', {}],
-    ['PUT', '/api/students', { code: 'SOC-2026-G1-0001', name: 'hack' }]]) {
+    ['PUT', '/api/students', { code: 'SOC-2026-G1-0001', name: 'hack' }], ['DELETE', '/api/students', { codes: ['SOC-2026-G1-0001'] }]]) {
     const r = await anon(m, p, b);
     check(`${m} ${p} → 401`, r.status === 401, r);
   }
@@ -102,6 +102,8 @@ function client() {
   check('الدكتور لا يصل لبيانات الطلاب', r.status === 403);
   r = await dr('GET', '/api/admins');
   check('الدكتور لا يصل لإدارة الحسابات', r.status === 403);
+  r = await dr('DELETE', '/api/students', { codes: ['SOC-2026-G1-0001'] });
+  check('الدكتور لا يستطيع حذف طلاب', r.status === 403);
   r = await dr('POST', '/api/attendance', { qrData: buildQrPayload('SOC-2026-G1-0001'), subjectCode: 'soc111' });
   check('الدكتور لا يرصد مادة غير مسندة له', r.status === 403);
   r = await dr('POST', '/api/attendance', { qrData: buildQrPayload('SOC-2026-G1-0001'), subjectCode: 'soc112' });
@@ -136,6 +138,8 @@ function client() {
   check('الليدر لا يرى الإحصائيات', r.status === 403);
   r = await ld('GET', '/api/students');
   check('الليدر لا يرى الطلاب', r.status === 403);
+  r = await ld('DELETE', '/api/students', { codes: ['SOC-2026-G1-0001'] });
+  check('الليدر لا يستطيع حذف طلاب', r.status === 403);
   r = await ld('POST', '/api/attendance', { qrData: buildQrPayload('SOC-2026-G1-0006'), subjectCode: 'soc118' });
   check('الليدر يرصد أي مادة في فرقته', r.data.success, r.data);
   r = await ld('POST', '/api/attendance', { qrData: buildQrPayload('SOC-2026-G2-0040'), subjectCode: 'soc211' });
@@ -195,6 +199,19 @@ function client() {
   check('إيقاف طالب', r.status === 200);
   r = await sa('POST', '/api/promote', { studentCodes: ['SOC-2026-G4-0080'], targetGrade: 'خريج' });
   check('ترقية للتخرج', r.status === 200, r.data);
+  r = await sa('GET', '/api/students');
+  const before = r.data.students.length;
+  r = await sa('DELETE', '/api/students', { codes: ['SOC-2026-G3-0070'] });
+  check('حذف طالب واحد', r.status === 200 && r.data.deleted === 1, r.data);
+  r = await sa('DELETE', '/api/students', { codes: ['SOC-2026-G3-0071', 'SOC-2026-G3-0073', 'SOC-2026-G3-0075'] });
+  check('حذف مجموعة طلاب محددين', r.status === 200 && r.data.deleted === 3, r.data);
+  r = await sa('GET', '/api/students');
+  const codesLeft = r.data.students.map(x => x.code);
+  check('اختفوا من الشيت والباقي سليم', r.data.students.length === before - 4 && !codesLeft.includes('SOC-2026-G3-0073') && codesLeft.includes('SOC-2026-G3-0072') && codesLeft.includes('SOC-2026-G3-0074'), r.data.students.length);
+  r = await sa('POST', '/api/attendance', { qrData: buildQrPayload('SOC-2026-G3-0071'), subjectCode: 'soc311' });
+  check('كارنيه الطالب المحذوف لم يعد يُقبل', r.data.type === 'not_found', r.data);
+  r = await sa('DELETE', '/api/students', { codes: [] });
+  check('حذف بدون تحديد مرفوض', r.status === 400);
   r = await sa('POST', '/api/setup', {});
   check('تأمين الشيت: قفل التبويبات وتشفير كلمات المرور', r.status === 200 && r.data.protectedTabs >= 80 && r.data.hashedPasswords >= 1 && r.data.createdTabs > 70, r.data);
   r = await sa('POST', '/api/setup', {});

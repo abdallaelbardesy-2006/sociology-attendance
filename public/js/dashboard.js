@@ -1,5 +1,5 @@
 (function () {
-  const { api, esc, toast, downloadCSV, rateHtml } = window.SOC;
+  const { api, esc, toast, say, downloadCSV, rateHtml } = window.SOC;
   window.SOC.registerSW();
 
   let ME = null;
@@ -24,9 +24,9 @@
     scanner: { label: 'ماسح الحضور', icon: 'fa-qrcode', roles: ['super_admin', 'doctor', 'leader'], render: renderScanner },
     students: { label: 'الطلاب', icon: 'fa-users', roles: ['super_admin'], render: renderStudents },
     promotion: { label: 'ترقية الفرق', icon: 'fa-arrow-up-right-dots', roles: ['super_admin'], render: renderPromotion },
-    users: { label: 'الدكاترة والليدرز', icon: 'fa-user-shield', roles: ['super_admin'], render: renderUsers },
+    users: { label: 'الحسابات والصلاحيات', icon: 'fa-user-shield', roles: ['super_admin'], render: renderUsers },
     audit: { label: 'سجل العمليات', icon: 'fa-clock-rotate-left', roles: ['super_admin'], render: renderAudit },
-    settings: { label: 'تأمين الشيت', icon: 'fa-lock', roles: ['super_admin'], render: renderSettings }
+    settings: { label: 'الإعدادات والأمان', icon: 'fa-lock', roles: ['super_admin'], render: renderSettings }
   };
 
   // ==================== أدوات عامة ====================
@@ -188,7 +188,7 @@
         try {
           return await api('/api/auth', { method: 'POST', body: { action: 'changePassword', currentPassword: cur, newPassword: n1 } });
         } catch (e) {
-          Swal.showValidationMessage(e.message);
+          Swal.showValidationMessage(esc(e.message));
         }
       }
     });
@@ -665,11 +665,11 @@
       const r = await api('/api/lectures', { method: 'POST', body });
       if (act === 'finish') {
         await stopCamera();
-        Swal.fire({ icon: 'success', title: r.message, text: 'المحاضرة التالية تُفتح في المرة القادمة.', timer: 2600, showConfirmButton: false });
+        Swal.fire({ icon: 'success', titleText: r.message, text: 'المحاضرة التالية تُفتح في المرة القادمة.', timer: 2600, showConfirmButton: false });
       } else toast('success', r.message);
       if (act === 'start' || act === 'force') { sc.count = 0; sc.log = []; document.getElementById('scCount').textContent = 0; drawLog(); }
     } catch (err) {
-      Swal.fire('تنبيه', err.message, 'warning');
+      say('warning', 'تنبيه', err.message);
     }
     await refreshLectures();
   }
@@ -876,7 +876,7 @@
         preConfirm: async () => {
           try {
             return await api('/api/students', { method: 'DELETE', body: { codes: targets.map(s => s.code) } });
-          } catch (err) { Swal.showValidationMessage(err.message); }
+          } catch (err) { Swal.showValidationMessage(esc(err.message)); }
         }
       });
       if (c.isConfirmed && c.value) {
@@ -914,7 +914,7 @@
           await api('/api/students', { method: 'PUT', body: { code: s.code, active: !s.active } });
           toast('success', 'تم التحديث');
           reload();
-        } catch (err) { Swal.fire('خطأ', err.message, 'error'); }
+        } catch (err) { say('error', 'خطأ', err.message); }
       }
     });
 
@@ -944,7 +944,7 @@
       preConfirm: async () => {
         try {
           return await api('/api/students', { method: 'PUT', body: { code: s.code, name: document.getElementById('eName').value, grade: document.getElementById('eGrade').value, enrollType: document.getElementById('eEnroll').value, status: document.getElementById('eStatus').value } });
-        } catch (e) { Swal.showValidationMessage(e.message); }
+        } catch (e) { Swal.showValidationMessage(esc(e.message)); }
       }
     });
     if (r.isConfirmed && r.value) { toast('success', 'تم حفظ التعديلات'); done(); }
@@ -976,7 +976,7 @@
           a.click();
         }
       });
-    } catch (e) { Swal.fire('خطأ', e.message, 'error'); }
+    } catch (e) { say('error', 'خطأ', e.message); }
   }
 
   // ==================== 4. الترقية ====================
@@ -1018,31 +1018,31 @@
     document.getElementById('pGo').addEventListener('click', async () => {
       const to = document.getElementById('pTo').value;
       const codes = [...document.querySelectorAll('.pChk:checked')].map(c => c.value);
-      if (!to || !codes.length) return Swal.fire('تنبيه', 'اختر الفرقة وحدد طالباً واحداً على الأقل', 'warning');
+      if (!to || !codes.length) return say('warning', 'تنبيه', 'اختر الفرقة وحدد طالباً واحداً على الأقل');
       const c = await Swal.fire({ icon: 'question', title: 'تأكيد الترقية', html: `ترقية <b>${codes.length}</b> طالب إلى <b>${esc(to)}</b>؟`, showCancelButton: true, confirmButtonText: 'نعم، نفّذ', cancelButtonText: 'إلغاء' });
       if (!c.isConfirmed) return;
       try {
         const r = await api('/api/promote', { method: 'POST', body: { studentCodes: codes, targetGrade: to } });
-        Swal.fire('تمت الترقية', r.message, 'success');
+        say('success', 'تمت الترقية', r.message);
         document.getElementById('pFrom').dispatchEvent(new Event('change'));
-      } catch (err) { Swal.fire('خطأ', err.message, 'error'); }
+      } catch (err) { say('error', 'خطأ', err.message); }
     });
   }
 
   // ==================== 5. الدكاترة والليدرز ====================
   async function renderUsers() {
     main.innerHTML = `
-      <div class="page-title"><h2>الدكاترة وليدرز الدفعات</h2>
-        <div class="d-flex gap-2"><button class="btn btn-brand btn-sm" id="addDoc"><i class="fas fa-plus me-1"></i> دكتور مادة</button><button class="btn btn-success btn-sm" id="addLeader"><i class="fas fa-plus me-1"></i> ليدر دفعة</button></div></div>
+      <div class="page-title"><h2>الحسابات والصلاحيات</h2>
+        <div class="d-flex gap-2 flex-wrap">${ME.isPrimary ? '<button class="btn btn-warning btn-sm" id="addSuper"><i class="fas fa-crown me-1"></i> مشرف عام</button>' : ''}<button class="btn btn-brand btn-sm" id="addDoc"><i class="fas fa-plus me-1"></i> دكتور مادة</button><button class="btn btn-success btn-sm" id="addLeader"><i class="fas fa-plus me-1"></i> ليدر دفعة</button></div></div>
       <div class="row g-3 mb-3">
-        <div class="col-md-4"><div class="kpi"><div class="ico" style="background:#e0e7ff;color:#3730a3"><i class="fas fa-crown"></i></div><div><div class="fw-800">المشرف العام</div><div class="lbl">كل الصلاحيات</div></div></div></div>
+        <div class="col-md-4"><div class="kpi"><div class="ico" style="background:#e0e7ff;color:#3730a3"><i class="fas fa-crown"></i></div><div><div class="fw-800">المشرف العام</div><div class="lbl">كل الصلاحيات (المالك فقط يضيف مشرفين عامين)</div></div></div></div>
         <div class="col-md-4"><div class="kpi"><div class="ico" style="background:#e0f2fe;color:#0369a1"><i class="fas fa-chalkboard-user"></i></div><div><div class="fw-800">دكتور مادة</div><div class="lbl">إحصائيات وماسح مواده فقط</div></div></div></div>
         <div class="col-md-4"><div class="kpi"><div class="ico" style="background:#dcfce7;color:#15803d"><i class="fas fa-qrcode"></i></div><div><div class="fw-800">ليدر دفعة</div><div class="lbl">الماسح فقط بدون إحصائيات</div></div></div></div>
       </div>
       <div class="card-x">
         <div class="filter-bar mb-3">
           <div style="grid-column: span 2"><label class="form-label">بحث</label><input class="form-control form-control-sm" id="uQ" placeholder="الاسم أو البريد أو المادة"></div>
-          <div><label class="form-label">الدور</label><select class="form-select form-select-sm" id="uRole">${opts([{ value: 'doctor', label: 'دكتور مادة' }, { value: 'leader', label: 'ليدر دفعة' }], '', 'الكل')}</select></div>
+          <div><label class="form-label">الدور</label><select class="form-select form-select-sm" id="uRole">${opts([{ value: 'super_admin', label: 'مشرف عام' }, { value: 'doctor', label: 'دكتور مادة' }, { value: 'leader', label: 'ليدر دفعة' }], '', 'الكل')}</select></div>
           <div><label class="form-label">الحالة</label><select class="form-select form-select-sm" id="uActive">${opts([{ value: '1', label: 'نشط' }, { value: '0', label: 'معطل' }], '', 'الكل')}</select></div>
         </div>
         <div id="uTable">${loadingHtml()}</div>
@@ -1051,11 +1051,11 @@
     let list = [];
     const table = new Table(document.getElementById('uTable'), [
       { key: 'name', label: 'الاسم', render: r => `<b>${esc(r.name)}</b><div class="small text-muted-2 ltr">${esc(r.email)}</div>` },
-      { key: 'role', label: 'الدور', render: r => ROLE_PILL[r.role] || `<span class="pill pill-bad">${esc(r.role)}</span>` },
+      { key: 'role', label: 'الدور', render: r => (ROLE_PILL[r.role] || '<span class="pill pill-bad">صلاحية غير صالحة</span>') + (r.isPrimary ? ' <span class="pill pill-gray">المالك</span>' : '') },
       { key: 'scope', label: 'النطاق', sortable: false, render: r => r.role === 'doctor' ? r.subjects.map(s => `<span class="pill pill-brand mb-1">${esc(s.name)}</span>`).join(' ') : r.role === 'leader' ? `<span class="pill pill-gray">${esc(r.grade === 'الكل' ? 'كل الفرق' : r.grade)}</span>` : 'الكل' },
-      { key: 'active', label: 'الحالة', render: r => (r.active ? '<span class="pill pill-ok">نشط</span>' : '<span class="pill pill-bad">معطل</span>') + (r.mustChange ? ' <span class="pill pill-warn" title="لم يغير كلمة المرور المؤقتة بعد">كلمة مؤقتة</span>' : '') },
+      { key: 'active', label: 'الحالة', render: r => (r.active ? '<span class="pill pill-ok">نشط</span>' : '<span class="pill pill-bad">معطل</span>') + (r.mustChange ? ' <span class="pill pill-warn" title="لم يغير كلمة المرور المؤقتة بعد">كلمة مؤقتة</span>' : '') + (r.locked ? ' <span class="pill pill-bad" title="محاولات دخول خاطئة متكررة">مقفل مؤقتاً</span>' : '') },
       { key: 'lastLogin', label: 'آخر دخول', render: r => `<span class="small ltr">${esc(r.lastLogin || '—')}</span>` },
-      { key: '_', label: 'إجراءات', sortable: false, render: r => r.isPrimary ? '<span class="small text-muted-2">حسابك</span>' : `
+      { key: '_', label: 'إجراءات', sortable: false, render: r => r.isPrimary ? `<span class="small text-muted-2">${r.email === ME.email ? 'حسابك' : 'المالك'}</span>` : (r.role === 'super_admin' && !ME.isPrimary) ? '<span class="small text-muted-2">يديره المالك</span>' : `
         <div class="btn-group btn-group-sm">
           <button class="btn btn-soft" data-u="edit" data-email="${esc(r.email)}" title="تعديل الصلاحيات"><i class="fas fa-pen"></i></button>
           <button class="btn btn-soft" data-u="reset" data-email="${esc(r.email)}" title="كلمة مرور جديدة"><i class="fas fa-key"></i></button>
@@ -1079,6 +1079,8 @@
       } catch (e) { document.getElementById('uTable').innerHTML = errorHtml(e.message); }
     };
 
+    const addSuper = document.getElementById('addSuper');
+    if (addSuper) addSuper.addEventListener('click', () => userForm('super_admin', null, reload));
     document.getElementById('addDoc').addEventListener('click', () => userForm('doctor', null, reload));
     document.getElementById('addLeader').addEventListener('click', () => userForm('leader', null, reload));
     document.getElementById('uTable').addEventListener('click', async e => {
@@ -1087,7 +1089,7 @@
       const u = list.find(a => a.email === b.dataset.email);
       if (!u) return;
       const act = b.dataset.u;
-      if (act === 'edit') return userForm(u.role, u, reload);
+      if (act === 'edit') return userForm(u.role === 'invalid' ? 'leader' : u.role, u, reload);
       const texts = {
         reset: ['إنشاء كلمة مرور مؤقتة جديدة؟', `سيتم إلغاء كلمة مرور ${u.name} الحالية وإنهاء جلساته.`],
         disable: ['تعطيل الحساب؟', `لن يتمكن ${u.name} من الدخول أو المسح، وستنتهي جلساته الحالية فوراً.`],
@@ -1100,7 +1102,7 @@
         if (r.tempPassword) await showTempPassword(r.tempPassword);
         else toast('success', r.message);
         reload();
-      } catch (err) { Swal.fire('خطأ', err.message, 'error'); }
+      } catch (err) { say('error', 'خطأ', err.message); }
     });
     reload();
   }
@@ -1117,13 +1119,15 @@
 
   async function userForm(role, existing, done) {
     const isDoc = role === 'doctor';
+    const isSuper = role === 'super_admin';
     const r = await Swal.fire({
       width: isDoc ? 640 : 480,
-      title: existing ? `تعديل صلاحيات ${esc(existing.name)}` : (isDoc ? 'إضافة دكتور مادة' : 'إضافة ليدر دفعة'),
+      title: existing ? `تعديل صلاحيات ${esc(existing.name)}` : (isDoc ? 'إضافة دكتور مادة' : isSuper ? 'إضافة مشرف عام' : 'إضافة ليدر دفعة'),
       html: `
-        <div class="mb-2"><label class="form-label">الاسم</label><input id="fName" class="form-control" maxlength="80" value="${esc(existing ? existing.name : '')}" placeholder="${isDoc ? 'أ.د/ ...' : 'اسم الليدر'}"></div>
+        <div class="mb-2"><label class="form-label">الاسم</label><input id="fName" class="form-control" maxlength="80" value="${esc(existing ? existing.name : '')}" placeholder="${isDoc ? 'أ.د/ ...' : isSuper ? 'اسم المشرف' : 'اسم الليدر'}"></div>
         <div class="mb-2"><label class="form-label">البريد الإلكتروني</label><input id="fEmail" type="email" class="form-control ltr" value="${esc(existing ? existing.email : '')}" ${existing ? 'disabled' : ''}></div>
-        ${isDoc ? `<div class="mb-2"><label class="form-label">المواد المسندة (يرى إحصائياتها ويمسح فيها فقط)</label>${subjectsPicker(existing ? existing.subjects.map(s => s.code) : [])}</div>`
+        ${isSuper ? '<div class="alert alert-warning small py-2 mb-2"><i class="fas fa-crown me-1"></i> المشرف العام يملك كل الصلاحيات: الإحصائيات، الطلاب والحذف، الدكاترة والليدرز، والإعدادات. لا يستطيع إدارة حسابات المشرفين العامين أو حسابك.</div>'
+          : isDoc ? `<div class="mb-2"><label class="form-label">المواد المسندة (يرى إحصائياتها ويمسح فيها فقط)</label>${subjectsPicker(existing ? existing.subjects.map(s => s.code) : [])}</div>`
           : `<div class="mb-2"><label class="form-label">الفرقة المسموح له بالمسح فيها</label><select id="fGrade" class="form-select">${opts([{ value: 'الكل', label: 'كل الفرق (كل المواد)' }, ...META.grades], existing ? existing.grade : 'الكل')}</select></div>`}
         ${existing ? '' : '<div class="small text-muted-2"><i class="fas fa-lock me-1"></i> سيتم إنشاء كلمة مرور مؤقتة قوية تلقائياً، ويُطلب منه تغييرها عند أول دخول.</div>'}`,
       didOpen: () => {
@@ -1152,12 +1156,12 @@
           name: document.getElementById('fName').value,
           email: existing ? existing.email : document.getElementById('fEmail').value,
           subjects: isDoc ? [...document.querySelectorAll('.msChk:checked')].map(c => c.value) : [],
-          grade: isDoc ? 'الكل' : document.getElementById('fGrade').value
+          grade: isDoc || isSuper ? 'الكل' : document.getElementById('fGrade').value
         };
         if (isDoc && !adminData.subjects.length) return Swal.showValidationMessage('اختر مادة واحدة على الأقل');
         try {
           return await api('/api/admins', { method: 'POST', body: { action: 'save', adminData } });
-        } catch (e) { Swal.showValidationMessage(e.message); }
+        } catch (e) { Swal.showValidationMessage(esc(e.message)); }
       }
     });
     if (r.isConfirmed && r.value) {
@@ -1170,7 +1174,7 @@
   async function showTempPassword(pass, title) {
     await Swal.fire({
       icon: 'success',
-      title: title || 'كلمة المرور المؤقتة',
+      titleText: title || 'كلمة المرور المؤقتة',
       html: `<p class="small text-muted-2 mb-2">انسخها وأرسلها للمستخدم بشكل خاص. <b>لن تظهر مرة أخرى</b>، وسيُطلب منه تغييرها عند أول دخول.</p>
         <div class="temp-pass" id="tmpPass">${esc(pass)}</div>
         <div class="small text-muted-2 mt-2">رابط الدخول: <span class="ltr">${esc(location.origin)}/admin</span></div>`,
@@ -1219,7 +1223,15 @@
   // ==================== 7. تأمين الشيت ====================
   function renderSettings() {
     main.innerHTML = `
-      <div class="page-title"><h2>تأمين قاعدة البيانات (Google Sheet)</h2></div>
+      <div class="page-title"><h2>الإعدادات والأمان</h2></div>
+      <div class="card-x">
+        <div class="card-head mb-0">
+          <div><h3 class="card-title"><i class="fas fa-user-plus"></i> تسجيل الطلاب الجدد</h3>
+            <div class="small text-muted-2 mt-1">اغلق التسجيل بعد انتهاء فترة التسجيل لمنع أي تسجيلات وهمية. الكارنيهات المسجلة تظل تعمل.</div></div>
+          <div class="form-check form-switch fs-5 m-0"><input class="form-check-input" type="checkbox" role="switch" id="regToggle" disabled></div>
+        </div>
+        <div id="regState" class="small mt-2 text-muted-2"><span class="spin me-1"></span> جاري التحميل...</div>
+      </div>
       <div class="card-x">
         <h3 class="card-title mb-3"><i class="fas fa-shield-halved"></i> الحماية المفعّلة في النظام</h3>
         <ul class="small lh-lg mb-0">
@@ -1237,6 +1249,22 @@
         <button class="btn btn-brand" id="runSetup"><i class="fas fa-lock me-1"></i> تشغيل الفحص والتأمين الآن</button>
         <div id="setupOut" class="mt-3"></div>
       </div>`;
+    const regToggle = document.getElementById('regToggle');
+    const showReg = open => {
+      regToggle.checked = open;
+      regToggle.disabled = false;
+      document.getElementById('regState').innerHTML = open ? '<span class="pill pill-ok"><i class="fas fa-lock-open"></i> التسجيل مفتوح للطلاب</span>' : '<span class="pill pill-bad"><i class="fas fa-lock"></i> التسجيل مغلق</span>';
+    };
+    api('/api/admins?settings=1').then(r => showReg(r.settings.registrationOpen)).catch(e => { document.getElementById('regState').textContent = e.message; });
+    regToggle.addEventListener('change', async () => {
+      const open = regToggle.checked;
+      regToggle.disabled = true;
+      try {
+        const r = await api('/api/admins', { method: 'POST', body: { action: 'setRegistration', open } });
+        showReg(r.registrationOpen);
+        toast('success', r.message);
+      } catch (err) { showReg(!open); say('error', 'خطأ', err.message); }
+    });
     document.getElementById('runSetup').addEventListener('click', async e => {
       const btn = e.currentTarget;
       btn.disabled = true;

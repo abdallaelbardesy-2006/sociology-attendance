@@ -1,5 +1,5 @@
 // اختبارات أمان وصلاحيات شاملة ضد سيرفر التطوير ببيانات وهمية
-// شغّل أولاً: node scripts/dev-server.js --mock   ثم: node scripts/test-api.js
+// شغّل أولاً: npm run dev   ثم: npm test
 process.env.QR_SECRET = process.env.QR_SECRET || 'dev-qr-secret-0123456789abcdef0123456789abcd';
 const { buildQrPayload } = require('../api/_lib/security');
 
@@ -20,8 +20,8 @@ function client() {
     const res = await fetch(BASE + path, { method, headers: h, body: body === undefined ? undefined : (typeof body === 'string' ? body : JSON.stringify(body)) });
     const sc = res.headers.get('set-cookie');
     if (sc) {
-      const m = sc.match(/soc_sess=([^;]*)/);
-      if (m) cookie = m[1] ? `soc_sess=${m[1]}` : '';
+      const m = sc.match(/__Host-soc_sess=([^;]*)/);
+      if (m) cookie = m[1] ? `__Host-soc_sess=${m[1]}` : '';
     }
     let data = {};
     try { data = await res.json(); } catch (e) { /* empty */ }
@@ -38,7 +38,7 @@ function client() {
     const r = await anon(m, p, b);
     check(`${m} ${p} → 401`, r.status === 401, r);
   }
-  const forgedCookie = await anon('GET', '/api/analytics', undefined, { Cookie: 'soc_sess=eyJlIjoiYWJkYWxsYS5lbGJhcmRlc3kxQGdtYWlsLmNvbSIsInIiOiJzdXBlcl9hZG1pbiJ9.fake' });
+  const forgedCookie = await anon('GET', '/api/analytics', undefined, { Cookie: '__Host-soc_sess=eyJlIjoiYWJkYWxsYS5lbGJhcmRlc3kxQGdtYWlsLmNvbSIsInIiOiJzdXBlcl9hZG1pbiJ9.fake' });
   check('كوكي مزور → 401', forgedCookie.status === 401);
   const meta = await anon('GET', '/api/meta');
   check('meta عام', meta.status === 200 && meta.data.grades.length === 4);
@@ -58,7 +58,7 @@ function client() {
   check('المفتاح الرئيسي لم يعد يفتح حسابات الآخرين', r.status === 401, r);
   r = await sa('POST', '/api/auth', { action: 'login', email: 'abdalla.elbardesy1@gmail.com', password: 'Old-Leaked-Pass1' });
   check('دخول بكلمة قديمة يطلب التغيير', r.status === 200 && r.data.user.mustChangePassword === true && r.data.user.role === 'super_admin', r);
-  check('الكوكي HttpOnly Secure SameSite=Strict', /HttpOnly/.test(r.setCookie) && /Secure/.test(r.setCookie) && /SameSite=Strict/.test(r.setCookie));
+  check('الكوكي __Host- HttpOnly Secure SameSite=Strict', /^__Host-/.test(r.setCookie) && /HttpOnly/.test(r.setCookie) && /Secure/.test(r.setCookie) && /SameSite=Strict/.test(r.setCookie));
   r = await sa('GET', '/api/analytics');
   check('قبل تغيير كلمة المرور → 403 MUST_CHANGE', r.status === 403 && r.data.code === 'MUST_CHANGE_PASSWORD', r);
   r = await sa('POST', '/api/auth', { action: 'changePassword', currentPassword: 'Old-Leaked-Pass1', newPassword: 'short' });
@@ -77,11 +77,63 @@ function client() {
   console.log('\n[4] إدارة الحسابات');
   r = await sa('GET', '/api/admins');
   check('قائمة الحسابات بدون كلمات مرور', r.status === 200 && r.data.admins.every(a => a.password === undefined), r.data.admins && r.data.admins[0]);
-  r = await sa('POST', '/api/admins', { action: 'save', adminData: { role: 'super_admin', email: 'x@y.com', name: 'x' } });
-  check('لا يمكن إنشاء سوبر أدمن آخر', r.status === 400);
+  r = await sa('POST', '/api/admins', { action: 'save', adminData: { role: 'owner', email: 'x@y.com', name: 'x' } });
+  check('دور غير معروف مرفوض', r.status === 400);
   r = await sa('POST', '/api/admins', { action: 'save', adminData: { role: 'doctor', email: 'dr.new@test.edu', name: 'د. جديد', subjects: ['soc112', 'soc121'] } });
   check('إضافة دكتور بمادتين + كلمة مؤقتة', r.status === 200 && /^[A-Za-z0-9]{4}-[A-Za-z0-9]{4}-[A-Za-z0-9]{4}$/.test(r.data.tempPassword), r);
   const drTemp = r.data.tempPassword;
+
+  console.log('\n[4-ب] مشرف عام إضافي');
+  r = await sa('POST', '/api/admins', { action: 'save', adminData: { role: 'super_admin', email: 'second.admin@test.edu', name: 'مشرف ثاني' } });
+  check('المالك يضيف مشرف عام', r.status === 200 && r.data.tempPassword, r.data);
+  const sa2Temp = r.data.tempPassword;
+  const sa2 = client();
+  r = await sa2('POST', '/api/auth', { action: 'login', email: 'second.admin@test.edu', password: sa2Temp });
+  check('المشرف الثاني يدخل كمشرف عام وليس مالكاً', r.status === 200 && r.data.user.role === 'super_admin' && r.data.user.isPrimary === false, r.data);
+  await sa2('POST', '/api/auth', { action: 'changePassword', currentPassword: sa2Temp, newPassword: 'SecondAdmin2026' });
+  r = await sa2('GET', '/api/analytics');
+  check('المشرف الثاني يرى كل الإحصائيات', r.status === 200 && r.data.scope.length === 78);
+  r = await sa2('POST', '/api/admins', { action: 'save', adminData: { role: 'leader', email: 'leader2@test.edu', name: 'ليدر تاني', grade: 'الفرقة الثانية' } });
+  check('المشرف الثاني يضيف ليدر', r.status === 200);
+  r = await sa2('POST', '/api/admins', { action: 'save', adminData: { role: 'super_admin', email: 'third.admin@test.edu', name: 'مشرف ثالث' } });
+  check('المشرف الثاني لا يضيف مشرف عام', r.status === 403, r.data);
+  r = await sa2('POST', '/api/admins', { action: 'disable', email: 'abdalla.elbardesy1@gmail.com' });
+  check('المشرف الثاني لا يعطل المالك', r.status === 400);
+  r = await sa2('POST', '/api/admins', { action: 'resetPassword', email: 'second.admin@test.edu' });
+  check('المشرف الثاني لا يدير حسابات المشرفين', r.status === 403);
+  r = await sa('GET', '/api/admins');
+  check('السوبر أدمن المزور في الشيت (بدون توقيع) يظهر كغير صالح', r.data.admins.find(a => a.email === 'fake.super@test.edu').role === 'invalid');
+  r = await sa('POST', '/api/admins', { action: 'save', adminData: { role: 'doctor', email: 'xss@test.edu', name: '<img src=x onerror=alert(1)>', subjects: ['soc111'] } });
+  check('رفض HTML في اسم الحساب', r.status === 400);
+  r = await sa('POST', '/api/admins', { action: 'disable', email: 'second.admin@test.edu' });
+  check('المالك يعطل المشرف الثاني', r.status === 200);
+  r = await sa2('GET', '/api/analytics');
+  check('جلسة المشرف الثاني انتهت فوراً', r.status === 401);
+  r = await sa('POST', '/api/admins', { action: 'enable', email: 'second.admin@test.edu' });
+
+  console.log('\n[4-ج] قفل الحساب بعد محاولات خاطئة (يعمل على كل السيرفرات)');
+  const lk = client();
+  for (let i = 0; i < 5; i++) await lk('POST', '/api/auth', { action: 'login', email: 'leader2@test.edu', password: 'wrong' + i });
+  r = await lk('POST', '/api/auth', { action: 'login', email: 'leader2@test.edu', password: 'wrong-final' });
+  check('المحاولة السادسة تقفل الحساب', r.status === 429 && /قفل/.test(r.data.message), r.data);
+  r = await sa('GET', '/api/admins');
+  check('الحساب يظهر مقفلاً مؤقتاً للمشرف', r.data.admins.find(a => a.email === 'leader2@test.edu').locked === true);
+  r = await sa('POST', '/api/admins', { action: 'resetPassword', email: 'leader2@test.edu' });
+  const l2 = r.data.tempPassword;
+  r = await lk('POST', '/api/auth', { action: 'login', email: 'leader2@test.edu', password: l2 });
+  check('إعادة التعيين تفك القفل', r.status === 200, r.data);
+
+  console.log('\n[4-د] غلق التسجيل');
+  r = await sa('POST', '/api/admins', { action: 'setRegistration', open: false });
+  check('غلق تسجيل الطلاب', r.status === 200 && r.data.registrationOpen === false);
+  r = await anon('GET', '/api/meta');
+  check('الصفحة العامة تعرف أن التسجيل مغلق', r.data.registrationOpen === false);
+  r = await anon('POST', '/api/students', { name: 'طالب بعد الغلق هنا', grade: 'الفرقة الأولى', enrollType: 'انتظام', status: 'عام' });
+  check('التسجيل مرفوض وهو مغلق', r.status === 403, r.data);
+  r = await anon('POST', '/api/admins', { action: 'setRegistration', open: true });
+  check('غير المسجل لا يغير الإعدادات', r.status === 401);
+  r = await sa('POST', '/api/admins', { action: 'setRegistration', open: true });
+  check('إعادة فتح التسجيل', r.data.registrationOpen === true);
 
   console.log('\n[5] صلاحيات الدكتور');
   const dr = client();

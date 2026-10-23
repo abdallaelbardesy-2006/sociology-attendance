@@ -2,7 +2,8 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
-const SESSION_COOKIE = 'soc_sess';
+// بادئة __Host- تمنع أي نطاق فرعي من ضبط أو سرقة الكوكي
+const SESSION_COOKIE = '__Host-soc_sess';
 const SESSION_TTL_SEC = 12 * 60 * 60;
 const SUPER_ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'abdalla.elbardesy1@gmail.com').trim().toLowerCase();
 
@@ -118,6 +119,11 @@ function sessionCookie(token, maxAge) {
   return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAge}`;
 }
 
+// توقيع دور المشرف العام الإضافي: تعديل الدور يدوياً في الشيت لا يمنح صلاحية
+function roleSignature(email, role) {
+  return b64url(crypto.createHmac('sha256', getSecret('SESSION_SECRET')).update(`soc-role:v1:${String(email).toLowerCase()}|${role}`).digest()).slice(0, 32);
+}
+
 // ==================== QR موقّع ضد التزوير ====================
 // محتوى الكود: SOC3|<كود الطالب>|<توقيع HMAC>
 // بدون السر لا يمكن توليد كود صالح لطالب آخر حتى لو عُرف كوده
@@ -164,7 +170,8 @@ function clearRateLimit(key) {
 }
 
 function clientIp(req) {
-  return String(req.headers['x-real-ip'] || (req.headers['x-forwarded-for'] || '').split(',')[0] || req.socket?.remoteAddress || 'unknown').trim();
+  // على Vercel هذه الـ headers يضبطها الخادم نفسه ولا يمكن للمستخدم تزويرها
+  return String(req.headers['x-vercel-forwarded-for'] || req.headers['x-real-ip'] || (req.headers['x-forwarded-for'] || '').split(',')[0] || req.socket?.remoteAddress || 'unknown').split(',')[0].trim();
 }
 
 module.exports = {
@@ -184,6 +191,7 @@ module.exports = {
   parseCookies,
   sessionCookie,
   buildQrPayload,
+  roleSignature,
   parseQrPayload,
   rateLimit,
   clearRateLimit,

@@ -5,7 +5,7 @@ const { SUBJECTS, GRADES, TERMS, findSubject, parseSubjectCodes } = require('./_
 const sec = require('./_lib/security');
 
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
-const SPREADSHEET_ID = (process.env.GOOGLE_SHEET_ID || '1lOvjgilrsXCeTWK5gvn9NTeb-gx4EuSE-cSOpu6UmFQ').trim();
+const SPREADSHEET_ID = (process.env.GOOGLE_SHEET_ID || '').trim();
 
 const ENROLL_TYPES = ['انتظام', 'انتساب'];
 const STUDENT_STATUSES = ['عام', 'حالات خاصة', 'إبصار'];
@@ -18,8 +18,9 @@ const LECTURE_STATUS = { locked: 'لم تبدأ', open: 'مفتوحة', done: '�
 const HEADERS = {
   Students: ['التوقيت', 'الاسم بالكامل', 'نوع القيد', 'الحالة', 'الفرقة الدراسية', 'كود الطالب', 'بيانات QR (موقعة)', 'نشط'],
   Attendance: ['التوقيت', 'التاريخ', 'الساعة', 'اسم الطالب', 'كود الطالب', 'الفرقة الدراسية', 'الترم', 'كود المادة', 'اسم المادة', 'حالة الحضور', 'إيميل الدكتور/الأدمن', 'رقم المحاضرة'],
-  Admins: ['الإيميل', 'كلمة المرور (مشفرة)', 'الاسم', 'الدور', 'المواد المخصصة', 'الفرقة المخصصة', 'تاريخ الإضافة', 'نشط', 'يجب تغيير كلمة المرور', 'آخر دخول'],
+  Admins: ['الإيميل', 'كلمة المرور (مشفرة)', 'الاسم', 'الدور', 'المواد المخصصة', 'الفرقة المخصصة', 'تاريخ الإضافة', 'نشط', 'يجب تغيير كلمة المرور', 'آخر دخول', 'توقيع الصلاحية', 'محاولات خاطئة', 'مقفل حتى'],
   AuditLog: ['التوقيت', 'المستخدم', 'الدور', 'الإجراء', 'التفاصيل', 'IP'],
+  Settings: ['الإعداد', 'القيمة', 'آخر تعديل', 'بواسطة'],
   Lectures: ['كود المادة', 'اسم المادة', 'الفرقة', 'الترم', 'رقم المحاضرة', 'الحالة', 'تاريخ البدء', 'وقت البدء', 'بدأها', 'تاريخ الإنهاء', 'وقت الإنهاء', 'أنهاها', 'عدد الحضور']
 };
 const SUBJECT_HEADER = ['التوقيت', 'التاريخ', 'الساعة', 'اسم الطالب', 'كود الطالب', 'الفرقة الدراسية', 'الترم', 'حالة الحضور', 'إيميل الدكتور/الأدمن', 'رقم المحاضرة'];
@@ -51,7 +52,8 @@ function loadCredentials() {
 }
 
 async function getSheetsClient() {
-  if (global.__SOC_SHEETS_MOCK__) return { sheets: global.__SOC_SHEETS_MOCK__, spreadsheetId: SPREADSHEET_ID };
+  if (global.__SOC_SHEETS_MOCK__) return { sheets: global.__SOC_SHEETS_MOCK__, spreadsheetId: 'mock' };
+  if (!SPREADSHEET_ID) throw new Error('GOOGLE_SHEET_ID غير مضبوط في متغيرات البيئة');
   if (clientCache) return clientCache;
   const creds = loadCredentials();
   serviceAccountEmail = creds.email;
@@ -196,12 +198,16 @@ async function readAudit(limit = 300) {
 }
 
 // ==================== المستخدمين والصلاحيات ====================
+// المالك (ADMIN_EMAIL) هو المشرف العام الأساسي، ويمكنه إضافة مشرفين عامين آخرين.
+// دور المشرف العام الإضافي موقّع (HMAC) حتى لا يمكن ترقية أي حساب بتعديل الشيت يدوياً.
+const MAX_FAILED_LOGINS = 6;
+const LOCK_MINUTES = 15;
 let adminsCache = { at: 0, list: null };
 
 async function readAdmins(fresh = false) {
-  if (!fresh && adminsCache.list && Date.now() - adminsCache.at < 15000) return adminsCache.list;
+  if (!fresh && adminsCache.list && Date.now() - adminsCache.at < 10000) return adminsCache.list;
   const { sheets, spreadsheetId } = await ensureSheets();
-  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: 'Admins!A2:J' });
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: 'Admins!A2:M' });
   const list = (res.data.values || []).map((r, i) => ({
     row: i + 2,
     email: String(r[0] || '').trim().toLowerCase(),
@@ -213,7 +219,10 @@ async function readAdmins(fresh = false) {
     createdAt: String(r[6] || '').trim(),
     active: String(r[7] || 'نعم').trim() !== 'لا',
     mustChange: String(r[8] || '').trim() === 'نعم',
-    lastLogin: String(r[9] || '').trim()
+    lastLogin: String(r[9] || '').trim(),
+    roleSig: String(r[10] || '').trim(),
+    failed: parseInt(r[11], 10) || 0,
+    lockedUntil: String(r[12] || '').trim()
   })).filter(a => a.email);
   adminsCache = { at: Date.now(), list };
   return list;
@@ -227,27 +236,33 @@ function subjectsToCell(codes) {
 }
 
 function adminRowValues(a) {
-  return [a.email, a.password, a.name, a.role, a.role === 'doctor' ? subjectsToCell(a.subjects) : 'الكل', a.grade || 'الكل', a.createdAt || '', a.active ? 'نعم' : 'لا', a.mustChange ? 'نعم' : 'لا', a.lastLogin || ''];
+  const roleSig = a.role === 'super_admin' ? sec.roleSignature(a.email, a.role) : '';
+  return [a.email, a.password, a.name, a.role, a.role === 'doctor' ? subjectsToCell(a.subjects) : 'الكل', a.grade || 'الكل', a.createdAt || '', a.active ? 'نعم' : 'لا', a.mustChange ? 'نعم' : 'لا', a.lastLogin || '', roleSig, a.failed || 0, a.lockedUntil || ''];
 }
 
 async function writeAdminRow(a) {
   const { sheets, spreadsheetId } = await ensureSheets();
   if (a.row) {
     await sheets.spreadsheets.values.update({
-      spreadsheetId, range: `Admins!A${a.row}:J${a.row}`, valueInputOption: 'RAW', requestBody: { values: [adminRowValues(a)] }
+      spreadsheetId, range: `Admins!A${a.row}:M${a.row}`, valueInputOption: 'RAW', requestBody: { values: [adminRowValues(a)] }
     });
   } else {
     await sheets.spreadsheets.values.append({
-      spreadsheetId, range: 'Admins!A:J', valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS', requestBody: { values: [adminRowValues(a)] }
+      spreadsheetId, range: 'Admins!A:M', valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS', requestBody: { values: [adminRowValues(a)] }
     });
   }
   adminsCache = { at: 0, list: null };
 }
 
+function isPrimary(email) {
+  return email === sec.SUPER_ADMIN_EMAIL;
+}
+
 function effectiveRole(admin) {
-  if (admin.email === sec.SUPER_ADMIN_EMAIL) return 'super_admin';
+  if (isPrimary(admin.email)) return 'super_admin';
+  if (admin.role === 'super_admin') return sec.safeEqual(admin.roleSig, sec.roleSignature(admin.email, 'super_admin')) ? 'super_admin' : null;
   if (admin.role === 'doctor' || admin.role === 'leader') return admin.role;
-  return null; // لا يوجد سوبر أدمن غير المالك الأساسي
+  return null;
 }
 
 function publicUser(admin, mustChange) {
@@ -256,6 +271,7 @@ function publicUser(admin, mustChange) {
     email: admin.email,
     name: admin.name || admin.email,
     role,
+    isPrimary: isPrimary(admin.email),
     subjects: role === 'doctor' ? admin.subjects.map(c => findSubject(c)).filter(Boolean) : [],
     grade: role === 'leader' ? admin.grade : 'الكل',
     mustChangePassword: !!mustChange
@@ -263,6 +279,7 @@ function publicUser(admin, mustChange) {
 }
 
 const LOGIN_FAIL = 'البريد الإلكتروني أو كلمة المرور غير صحيحة';
+let dummyHash = null;
 
 async function login(email, password, ip) {
   const cleanEmail = cleanText(email, 120).toLowerCase();
@@ -278,10 +295,16 @@ async function login(email, password, ip) {
 
   const admins = await readAdmins(true);
   let admin = admins.find(a => a.email === cleanEmail);
-  const isPrimary = cleanEmail === sec.SUPER_ADMIN_EMAIL;
+  const primary = isPrimary(cleanEmail);
   const envKey = (process.env.ADMIN_SECRET_KEY || '').trim();
   let ok = false;
   let legacy = false;
+
+  // قفل الحساب بعد محاولات خاطئة متتالية (محفوظ في الشيت فيعمل على كل نسخ السيرفر)
+  if (admin && admin.lockedUntil && Date.parse(admin.lockedUntil) > Date.now()) {
+    const mins = Math.ceil((Date.parse(admin.lockedUntil) - Date.now()) / 60000);
+    throw new HttpError(429, `الحساب مقفل مؤقتاً بسبب محاولات دخول خاطئة. حاول بعد ${mins} دقيقة`);
+  }
 
   if (admin) {
     if (sec.isHashed(admin.password)) {
@@ -290,17 +313,33 @@ async function login(email, password, ip) {
       ok = sec.safeEqual(pw, admin.password);
       legacy = ok;
     }
-    if (!ok && isPrimary && !sec.isHashed(admin.password) && envKey && sec.safeEqual(pw, envKey)) {
+    if (!ok && primary && !sec.isHashed(admin.password) && envKey && sec.safeEqual(pw, envKey)) {
       ok = true;
       legacy = true;
     }
-  } else if (isPrimary && envKey && sec.safeEqual(pw, envKey)) {
-    ok = true;
-    legacy = true;
-    admin = { row: 0, email: cleanEmail, password: '', name: 'المشرف العام', role: 'super_admin', subjects: [], grade: 'الكل', createdAt: cairoNow().date, active: true, mustChange: true, lastLogin: '' };
+  } else {
+    // نفس زمن التحقق للبريد غير الموجود حتى لا يمكن معرفة الحسابات المسجلة من سرعة الرد
+    if (!dummyHash) dummyHash = sec.hashPassword('dummy-password-for-timing');
+    sec.verifyPassword(pw, dummyHash);
+    if (primary && envKey && sec.safeEqual(pw, envKey)) {
+      ok = true;
+      legacy = true;
+      admin = { row: 0, email: cleanEmail, password: '', name: 'المشرف العام', role: 'super_admin', subjects: [], grade: 'الكل', createdAt: cairoNow().date, active: true, mustChange: true, lastLogin: '', failed: 0, lockedUntil: '' };
+    }
   }
 
   if (!ok || !admin) {
+    if (admin) {
+      admin.failed = (admin.failed || 0) + 1;
+      if (admin.failed >= MAX_FAILED_LOGINS) {
+        admin.lockedUntil = new Date(Date.now() + LOCK_MINUTES * 60000).toISOString();
+        admin.failed = 0;
+        await writeAdminRow(admin);
+        await audit(cleanEmail, admin.role, 'قفل الحساب مؤقتاً', `${MAX_FAILED_LOGINS} محاولات خاطئة`, ip);
+        throw new HttpError(429, `تم قفل الحساب ${LOCK_MINUTES} دقيقة بسبب محاولات دخول خاطئة متكررة`);
+      }
+      await writeAdminRow(admin);
+    }
     await audit(cleanEmail, '', 'فشل تسجيل الدخول', '', ip);
     throw new HttpError(401, LOGIN_FAIL);
   }
@@ -319,8 +358,10 @@ async function login(email, password, ip) {
     admin.password = sec.hashPassword(pw);
     admin.mustChange = true;
   }
-  if (role === 'super_admin') admin.role = 'super_admin';
+  if (primary) admin.role = 'super_admin';
   admin.lastLogin = cairoNow().stamp;
+  admin.failed = 0;
+  admin.lockedUntil = '';
   await writeAdminRow(admin);
   sec.clearRateLimit(`login-user:${cleanEmail}`);
   await audit(cleanEmail, role, 'تسجيل دخول', legacy ? 'كلمة مرور قديمة - مطلوب تغييرها' : '', ip);
@@ -373,57 +414,69 @@ async function listAdminsSafe() {
   return admins.map(a => ({
     email: a.email,
     name: a.name,
-    role: effectiveRole(a) || a.role,
-    isPrimary: a.email === sec.SUPER_ADMIN_EMAIL,
+    role: effectiveRole(a) || 'invalid',
+    isPrimary: isPrimary(a.email),
     subjects: a.subjects.map(c => findSubject(c)).filter(Boolean),
     grade: a.grade,
     createdAt: a.createdAt,
     active: a.active,
     mustChange: a.mustChange,
     lastLogin: a.lastLogin,
-    passwordSecured: sec.isHashed(a.password)
+    locked: !!(a.lockedUntil && Date.parse(a.lockedUntil) > Date.now())
   }));
 }
+
+// حسابات المشرفين العامين لا يديرها إلا المالك
+function assertCanManage(actor, target) {
+  if (target && isPrimary(target.email)) throw new HttpError(400, 'لا يمكن تعديل حساب المالك من هنا');
+  if (target && effectiveRole(target) === 'super_admin' && !actor.isPrimary) {
+    throw new HttpError(403, 'إدارة حسابات المشرفين العامين للمالك فقط');
+  }
+}
+
+const ADMIN_NAME_RE = /^[؀-ۿa-zA-Z0-9\s.'()/-]+$/;
 
 async function saveAdmin(actor, data, ip) {
   const email = cleanText(data.email, 120).toLowerCase();
   const name = cleanText(data.name, 80);
   const role = String(data.role || '');
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, 'البريد الإلكتروني غير صالح');
-  if (!name) throw new HttpError(400, 'الاسم مطلوب');
-  if (email === sec.SUPER_ADMIN_EMAIL) throw new HttpError(400, 'لا يمكن تعديل حساب المشرف العام من هنا');
-  if (role !== 'doctor' && role !== 'leader') throw new HttpError(400, 'الدور يجب أن يكون دكتور مادة أو ليدر دفعة');
+  if (!/^[^\s@<>"']+@[^\s@<>"']+\.[^\s@<>"']+$/.test(email)) throw new HttpError(400, 'البريد الإلكتروني غير صالح');
+  if (!name || !ADMIN_NAME_RE.test(name)) throw new HttpError(400, 'الاسم مطلوب ويحتوي على حروف وأرقام فقط');
+  if (isPrimary(email)) throw new HttpError(400, 'لا يمكن تعديل حساب المالك من هنا');
+  if (!['doctor', 'leader', 'super_admin'].includes(role)) throw new HttpError(400, 'دور غير صالح');
+  if (role === 'super_admin' && !actor.isPrimary) throw new HttpError(403, 'إضافة مشرف عام للمالك فقط');
 
   let subjects = [];
   let grade = 'الكل';
   if (role === 'doctor') {
     subjects = parseSubjectCodes((Array.isArray(data.subjects) ? data.subjects : [data.subjects]).join('|'));
     if (!subjects.length) throw new HttpError(400, 'يجب اختيار مادة واحدة على الأقل للدكتور');
-  } else {
+  } else if (role === 'leader') {
     grade = data.grade === 'الكل' || GRADES.includes(data.grade) ? data.grade : 'الكل';
   }
 
   const admins = await readAdmins(true);
   const existing = admins.find(a => a.email === email);
-  let tempPassword = null;
   if (existing) {
+    assertCanManage(actor, existing);
     Object.assign(existing, { name, role, subjects, grade });
     await writeAdminRow(existing);
     await audit(actor.email, actor.role, 'تعديل صلاحيات', `${email} → ${role} ${role === 'doctor' ? subjects.join(',') : grade}`, ip);
-    return { success: true, message: `تم تحديث صلاحيات (${name})` };
+    return { success: true, message: 'تم تحديث صلاحيات الحساب' };
   }
-  tempPassword = sec.generateTempPassword();
-  await writeAdminRow({ row: 0, email, password: sec.hashPassword(tempPassword), name, role, subjects, grade, createdAt: cairoNow().date, active: true, mustChange: true, lastLogin: '' });
+  const tempPassword = sec.generateTempPassword();
+  await writeAdminRow({ row: 0, email, password: sec.hashPassword(tempPassword), name, role, subjects, grade, createdAt: cairoNow().date, active: true, mustChange: true, lastLogin: '', failed: 0, lockedUntil: '' });
   await audit(actor.email, actor.role, 'إضافة حساب', `${email} (${role}) ${role === 'doctor' ? subjects.join(',') : grade}`, ip);
-  return { success: true, message: `تم إضافة (${name}) بنجاح`, tempPassword };
+  return { success: true, message: 'تم إضافة الحساب بنجاح', tempPassword };
 }
 
 async function setAdminActive(actor, email, active, ip) {
   const target = cleanText(email, 120).toLowerCase();
-  if (target === sec.SUPER_ADMIN_EMAIL) throw new HttpError(400, 'لا يمكن تعطيل حساب المشرف العام');
   const admin = (await readAdmins(true)).find(a => a.email === target);
   if (!admin) throw new HttpError(404, 'الحساب غير موجود');
+  assertCanManage(actor, admin);
   admin.active = !!active;
+  if (active) { admin.failed = 0; admin.lockedUntil = ''; }
   await writeAdminRow(admin);
   await audit(actor.email, actor.role, active ? 'تفعيل حساب' : 'تعطيل حساب', target, ip);
   return { success: true, message: active ? 'تم تفعيل الحساب' : 'تم تعطيل الحساب وإنهاء جلساته' };
@@ -431,15 +484,50 @@ async function setAdminActive(actor, email, active, ip) {
 
 async function resetAdminPassword(actor, email, ip) {
   const target = cleanText(email, 120).toLowerCase();
-  if (target === sec.SUPER_ADMIN_EMAIL) throw new HttpError(400, 'غيّر كلمة مرورك من زر "تغيير كلمة المرور"');
+  if (isPrimary(target)) throw new HttpError(400, 'غيّر كلمة مرورك من زر "تغيير كلمة المرور"');
   const admin = (await readAdmins(true)).find(a => a.email === target);
   if (!admin) throw new HttpError(404, 'الحساب غير موجود');
+  assertCanManage(actor, admin);
   const tempPassword = sec.generateTempPassword();
   admin.password = sec.hashPassword(tempPassword);
   admin.mustChange = true;
+  admin.failed = 0;
+  admin.lockedUntil = '';
   await writeAdminRow(admin);
   await audit(actor.email, actor.role, 'إعادة تعيين كلمة مرور', target, ip);
   return { success: true, message: 'تم إنشاء كلمة مرور مؤقتة جديدة', tempPassword };
+}
+
+// ==================== الإعدادات (تبويب Settings) ====================
+let settingsCache = { at: 0, map: null };
+
+async function readSettings(fresh = false) {
+  if (!fresh && settingsCache.map && Date.now() - settingsCache.at < 15000) return settingsCache.map;
+  const { sheets, spreadsheetId } = await ensureSheets();
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: 'Settings!A2:D' });
+  const map = {};
+  (res.data.values || []).forEach((r, i) => { if (r[0]) map[String(r[0]).trim()] = { row: i + 2, value: String(r[1] || '').trim() }; });
+  settingsCache = { at: Date.now(), map };
+  return map;
+}
+
+async function getPublicSettings() {
+  const map = await readSettings();
+  return { registrationOpen: !map.registrationOpen || map.registrationOpen.value !== 'لا' };
+}
+
+async function setRegistrationOpen(actor, open, ip) {
+  const map = await readSettings(true);
+  const { sheets, spreadsheetId } = await ensureSheets();
+  const values = [['registrationOpen', open ? 'نعم' : 'لا', cairoNow().stamp, actor.email]];
+  if (map.registrationOpen) {
+    await sheets.spreadsheets.values.update({ spreadsheetId, range: `Settings!A${map.registrationOpen.row}:D${map.registrationOpen.row}`, valueInputOption: 'RAW', requestBody: { values } });
+  } else {
+    await sheets.spreadsheets.values.append({ spreadsheetId, range: 'Settings!A:D', valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS', requestBody: { values } });
+  }
+  settingsCache = { at: 0, map: null };
+  await audit(actor.email, actor.role, open ? 'فتح تسجيل الطلاب' : 'غلق تسجيل الطلاب', '', ip);
+  return { success: true, registrationOpen: !!open, message: open ? 'تم فتح تسجيل الطلاب' : 'تم غلق تسجيل الطلاب' };
 }
 
 // ==================== الطلاب ====================
@@ -478,6 +566,7 @@ const NAME_RE = /^[؀-ۿa-zA-Z\s.'-]+$/;
 
 async function registerStudent(payload, ip) {
   if (payload.website) throw new HttpError(400, 'طلب غير صالح'); // honeypot ضد البوتات
+  if (!(await getPublicSettings()).registrationOpen) throw new HttpError(403, 'تسجيل الطلاب مغلق حالياً. تواصل مع إدارة القسم');
   const name = cleanText(payload.name, 80);
   const enrollType = cleanText(payload.enrollType);
   const status = cleanText(payload.status);
@@ -1209,6 +1298,8 @@ module.exports = {
   listAdminsSafe,
   saveAdmin,
   setAdminActive,
+  getPublicSettings,
+  setRegistrationOpen,
   resetAdminPassword,
   readStudents,
   studentPublic,

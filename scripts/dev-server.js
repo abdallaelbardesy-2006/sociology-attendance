@@ -14,8 +14,8 @@ if (MOCK) {
   process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'dev-session-secret-0123456789abcdef0123456789';
   process.env.QR_SECRET = process.env.QR_SECRET || 'dev-qr-secret-0123456789abcdef0123456789abcd';
   process.env.ADMIN_SECRET_KEY = process.env.ADMIN_SECRET_KEY || 'Bootstrap-Admin-2026';
-  const { createMockSheets } = require('./mock-sheets');
-  global.__SOC_SHEETS_MOCK__ = createMockSheets(require('./mock-seed')());
+  const { createMockSheets } = require('../tests/mock-sheets');
+  global.__SOC_SHEETS_MOCK__ = createMockSheets(require('../tests/mock-seed')());
 } else if (fs.existsSync(path.join(ROOT, '.env'))) {
   fs.readFileSync(path.join(ROOT, '.env'), 'utf8').split(/\r?\n/).forEach(line => {
     const m = line.match(/^([A-Z_]+)=(.*)$/);

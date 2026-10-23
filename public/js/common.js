@@ -30,7 +30,13 @@
 
   function toast(icon, title) {
     if (!window.Swal) return;
-    Swal.fire({ toast: true, position: 'top', icon, title, showConfirmButton: false, timer: 2600, timerProgressBar: true });
+    Swal.fire({ toast: true, position: 'top', icon, titleText: title, showConfirmButton: false, timer: 2600, timerProgressBar: true });
+  }
+
+  // رسالة بنص عادي (بدون HTML) حتى لا يُنفذ أي محتوى قادم من الخادم
+  function say(icon, title, text) {
+    if (!window.Swal) return Promise.resolve({});
+    return Swal.fire({ icon, titleText: title, text: text == null ? '' : String(text) });
   }
 
   // تصدير CSV آمن ضد حقن المعادلات عند الفتح في Excel
@@ -67,5 +73,5 @@
     }
   }
 
-  window.SOC = { esc, api, toast, downloadCSV, rateHtml, rateColor, registerSW };
+  window.SOC = { esc, api, toast, say, downloadCSV, rateHtml, rateColor, registerSW };
 })();

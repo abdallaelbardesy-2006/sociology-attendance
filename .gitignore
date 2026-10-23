@@ -10,3 +10,4 @@ service-account*.json
 # local secrets
 .admin-credentials*
 *.local.txt
+.claude/

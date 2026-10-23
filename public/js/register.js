@@ -1,5 +1,5 @@
 (function () {
-  const { api, esc } = window.SOC;
+  const { api, esc, say } = window.SOC;
 
   const GRADES = ['الفرقة الأولى', 'الفرقة الثانية', 'الفرقة الثالثة', 'الفرقة الرابعة'];
   const ENROLL = ['انتظام', 'انتساب'];
@@ -13,6 +13,13 @@
   renderChoice('gradeChoice', 'grade', GRADES, '');
   renderChoice('enrollChoice', 'enroll', ENROLL, 'انتظام');
   renderChoice('statusChoice', 'status', STATUS, 'عام');
+
+  // لو المشرف قفل التسجيل نعرض رسالة بدل الفورم
+  api('/api/meta').then(m => {
+    if (m.registrationOpen === false) {
+      document.getElementById('formSection').innerHTML = '<div class="text-center py-4"><i class="fas fa-lock fa-2x text-muted mb-3"></i><h2 class="h5 fw-900">التسجيل مغلق حالياً</h2><p class="text-muted-2 mb-0">انتهت فترة تسجيل الطلاب. إذا فقدت الكارنيه تواصل مع إدارة القسم.</p></div>';
+    }
+  }).catch(() => {});
 
   const val = name => (document.querySelector(`input[name="${name}"]:checked`) || {}).value || '';
   const btn = document.getElementById('btnRegister');
@@ -72,7 +79,7 @@
       a.download = `كارنيه_حضور_${code}.png`;
       a.href = canvas.toDataURL('image/png');
       a.click();
-    }).catch(err => Swal.fire('خطأ', 'تعذر حفظ الصورة: ' + err.message, 'error'));
+    }).catch(err => say('error', 'خطأ', 'تعذر حفظ الصورة: ' + err.message));
   });
 
   document.getElementById('btnNew').addEventListener('click', () => {

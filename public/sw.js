@@ -1,66 +1,31 @@
-const CACHE_NAME = 'soc-attendance-v8-rbac';
-const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/admin',
-  '/admin.html',
-  '/dashboard',
-  '/dashboard.html',
-  '/manifest.json',
-  'https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.rtl.min.css',
-  'https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap',
-  'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css'
-];
+const CACHE_NAME = 'soc-attendance-v9-secure';
+const STATIC_ASSETS = ['/', '/admin', '/dashboard', '/css/app.css', '/js/common.js', '/js/login.js', '/js/dashboard.js', '/js/register.js', '/manifest.json', '/icons/icon-192.png'];
 
 self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(STATIC_ASSETS).catch(err => console.log('Cache error:', err));
-    })
-  );
+  event.waitUntil(caches.open(CACHE_NAME).then(c => c.addAll(STATIC_ASSETS)).catch(() => {}));
   self.skipWaiting();
 });
 
 self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(keys => {
-      return Promise.all(
-        keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
-      );
-    })
-  );
+  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))));
   self.clients.claim();
 });
 
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
+  // نتعامل فقط مع ملفات نفس الموقع (GET) ولا نخزن الـ API أبداً
+  if (event.request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
 
-  // 1. لا نقوم بتخزين طلبات الـ API نهائياً
-  if (url.pathname.startsWith('/api/')) {
-    event.respondWith(fetch(event.request));
-    return;
-  }
-
-  // 2. لجميع صفحات الـ HTML والتنقل: نعتمد Network-First لجلب أحدث نسخة دائماً
-  if (event.request.mode === 'navigate' || event.request.headers.get('accept')?.includes('text/html')) {
-    event.respondWith(
-      fetch(event.request)
-        .then(networkResponse => {
-          if (networkResponse && networkResponse.status === 200) {
-            const clone = networkResponse.clone();
-            caches.open(CACHE_NAME).then(c => c.put(event.request, clone));
-          }
-          return networkResponse;
-        })
-        .catch(() => caches.match(event.request))
-    );
-    return;
-  }
-
-  // 3. لباقي الملفات الثابتة (أيقونات، خطوط): Cache-First
+  // Network-first: أحدث نسخة دائماً، والكاش للعمل عند انقطاع الإنترنت فقط
   event.respondWith(
-    caches.match(event.request).then(cached => {
-      return cached || fetch(event.request);
-    })
+    fetch(event.request)
+      .then(res => {
+        if (res && res.status === 200 && res.type === 'basic') {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then(c => c.put(event.request, copy));
+        }
+        return res;
+      })
+      .catch(() => caches.match(event.request))
   );
 });

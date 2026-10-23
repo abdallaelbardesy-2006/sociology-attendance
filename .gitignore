@@ -6,3 +6,7 @@ node_modules
 *.log
 *key*.json
 service-account*.json
+
+# local secrets
+.admin-credentials*
+*.local.txt

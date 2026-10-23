@@ -1,26 +1,37 @@
-const { validateAdminDirect } = require('./_sheets');
+const { route, HttpError } = require('./_lib/http');
+const { login, authenticate, changeOwnPassword, audit } = require('./_sheets');
+const { sessionCookie, SESSION_TTL_SEC } = require('./_lib/security');
 
-module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-
-  const { email, key } = req.body || {};
-  const userEmail = (email || '').trim().toLowerCase();
-  const userKey = (key || '').trim();
-
-  if (!userEmail || !userKey) {
-    return res.status(400).json({ valid: false, message: 'يرجى إدخال البريد الإلكتروني وكلمة المرور' });
+// GET: بيانات الجلسة الحالية | POST {action: login | logout | changePassword}
+module.exports = route({ methods: ['GET', 'POST'] }, async ({ req, res, body, ip }) => {
+  if (req.method === 'GET') {
+    const user = await authenticate(req, null, { allowMustChange: true });
+    const { _admin, subjectCodes, ...safe } = user;
+    return { success: true, user: safe };
   }
 
-  try {
-    const adminUser = await validateAdminDirect(userEmail, userKey);
-    return res.status(200).json(adminUser);
-  } catch (error) {
-    console.error('Auth error:', error.message);
-    return res.status(401).json({ valid: false, message: error.message });
+  const action = body.action;
+  if (action === 'login') {
+    const { token, user } = await login(body.email, body.password, ip);
+    res.setHeader('Set-Cookie', sessionCookie(token, SESSION_TTL_SEC));
+    return { success: true, user };
   }
-};
+
+  if (action === 'logout') {
+    res.setHeader('Set-Cookie', sessionCookie('', 0));
+    try {
+      const user = await authenticate(req, null, { allowMustChange: true });
+      await audit(user.email, user.role, 'تسجيل خروج', '', ip);
+    } catch (e) { /* جلسة منتهية بالفعل */ }
+    return { success: true };
+  }
+
+  if (action === 'changePassword') {
+    const user = await authenticate(req, null, { allowMustChange: true });
+    const { token, user: updated } = await changeOwnPassword(user, body.currentPassword, body.newPassword, ip);
+    res.setHeader('Set-Cookie', sessionCookie(token, SESSION_TTL_SEC));
+    return { success: true, message: 'تم تغيير كلمة المرور بنجاح', user: updated };
+  }
+
+  throw new HttpError(400, 'إجراء غير معروف');
+});

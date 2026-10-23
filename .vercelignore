@@ -1,0 +1,9 @@
+.env
+.env.*
+*.local.txt
+.admin-credentials*
+service-account*.json
+*key*.json
+.claude
+node_modules
+.git

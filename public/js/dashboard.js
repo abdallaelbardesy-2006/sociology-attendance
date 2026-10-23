@@ -329,7 +329,8 @@
       const table = new Table(box, [
         { key: 'code', label: 'الكود', render: r => `<code>${esc(r.code)}</code>` },
         { key: 'name', label: 'المادة', render: r => `<b>${esc(r.name)}</b><div class="small text-muted-2">${esc(r.grade)} • ${esc(r.term)}</div>` },
-        { key: 'sessions', label: 'محاضرات' },
+        { key: 'lecturesDone', label: 'المحاضرات المنتهية', render: r => `<b>${r.lecturesDone}</b> / 15${r.currentLecture ? `<div class="small text-muted-2">التالية: رقم ${r.currentLecture}</div>` : '<div class="small text-success">اكتملت</div>'}` },
+        { key: 'sessions', label: 'محاضرات مرصودة' },
         { key: 'enrolled', label: 'طلاب الفرقة' },
         { key: 'present', label: 'إجمالي الحضور', render: r => `${r.present}${r.otherGrade ? ` <span class="pill pill-warn" title="من فرق أخرى">+${r.otherGrade} تخلف</span>` : ''}` },
         { key: 'attendanceRate', label: 'نسبة الحضور', render: r => r.sessions ? rateHtml(r.attendanceRate) : '<span class="text-muted-2 small">لم تبدأ</span>' },
@@ -352,12 +353,13 @@
       tools.innerHTML = '<button class="btn btn-sm btn-outline-success" id="xSess"><i class="fas fa-file-csv me-1"></i> تصدير</button>';
       const single = d.scope.length === 1;
       const table = new Table(box, [
+        { key: 'lectureNo', label: 'المحاضرة', render: r => r.lectureNo ? `<span class="pill pill-brand">رقم ${r.lectureNo}</span>` : '<span class="text-muted-2 small">—</span>' },
         { key: 'date', label: 'التاريخ', render: r => `<b class="ltr">${esc(r.date)}</b>` },
         { key: 'subjectName', label: 'المادة', render: r => `${esc(r.subjectName)} <code>${esc(r.subjectCode)}</code>` },
         { key: 'present', label: 'حاضر', render: r => `<span class="pill pill-ok">${r.present}</span>` },
         { key: 'absent', label: 'غائب', render: r => `<span class="pill pill-bad">${r.absent}</span>` },
         { key: 'rate', label: 'النسبة', sortValue: r => r.enrolled ? r.present / r.enrolled : 0, render: r => rateHtml(r.enrolled ? Math.min(100, Math.round(r.present / r.enrolled * 100)) : 0) },
-        { key: '_', label: '', sortable: false, render: r => single ? `<button class="btn btn-sm btn-soft" data-session="${esc(r.date)}"><i class="fas fa-list-check me-1"></i> كشف الحضور والغياب</button>` : '' }
+        { key: '_', label: '', sortable: false, render: r => single ? `<button class="btn btn-sm btn-soft" data-session="${esc(r.key)}"><i class="fas fa-list-check me-1"></i> كشف الحضور والغياب</button>` : '' }
       ], { sortKey: 'date', sortDir: -1 });
       table.setRows(d.sessions);
       if (!single) box.insertAdjacentHTML('afterbegin', '<div class="alert alert-info small py-2">اختر مادة واحدة من الفلتر لعرض كشف الحاضرين والغائبين بالأسماء لكل محاضرة.</div>');
@@ -366,8 +368,8 @@
         if (b) showSessionSheet(b.dataset.session);
       };
       document.getElementById('xSess').addEventListener('click', () => downloadCSV(`المحاضرات_${fileTag}.csv`,
-        ['التاريخ', 'كود المادة', 'المادة', 'الفرقة', 'حاضر', 'غائب', 'طلاب الفرقة'],
-        d.sessions.map(s => [s.date, s.subjectCode, s.subjectName, s.grade, s.present, s.absent, s.enrolled])));
+        ['رقم المحاضرة', 'التاريخ', 'كود المادة', 'المادة', 'الفرقة', 'حاضر', 'غائب', 'طلاب الفرقة'],
+        d.sessions.map(s => [s.lectureNo || '', s.date, s.subjectCode, s.subjectName, s.grade, s.present, s.absent, s.enrolled])));
     }
 
     if (an.tab === 'students') {
@@ -430,10 +432,12 @@
     }
   }
 
-  function showSessionSheet(date) {
+  function showSessionSheet(key) {
     const d = an.data;
-    const sess = d.sessions.find(s => s.date === date);
+    const sess = d.sessions.find(s => s.key === key);
     if (!sess) return;
+    const date = sess.date;
+    const lecLabel = sess.lectureNo ? `المحاضرة رقم ${sess.lectureNo} — ` : '';
     const present = new Set(sess.presentCodes || []);
     const grade = d.scope[0].grade;
     const roster = d.students.filter(s => s.grade === grade);
@@ -443,7 +447,7 @@
     const list = arr => arr.length ? arr.map((s, i) => `<div class="d-flex justify-content-between border-bottom py-1 small"><span>${i + 1}. ${esc(s.name)}</span><code>${esc(s.code)}</code></div>`).join('') : '<div class="text-muted-2 small py-2">لا يوجد</div>';
     Swal.fire({
       width: 760,
-      title: `كشف ${esc(sess.subjectName)} <span class="ltr d-inline-block">${esc(date)}</span>`,
+      title: `كشف ${esc(sess.subjectName)}<div class="small fw-normal mt-1">${lecLabel}<span class="ltr d-inline-block">${esc(date)}</span></div>`,
       html: `
         <div class="row g-3 text-end">
           <div class="col-md-6"><div class="fw-800 text-success mb-1"><i class="fas fa-circle-check"></i> الحاضرون (${presentList.length + extra.length})</div><div style="max-height:340px;overflow:auto">${list(presentList)}${extra.length ? `<div class="small text-warning mt-2">+ ${extra.length} من خارج كشف الفرقة (تخلف أو موقوف)</div>` : ''}</div></div>
@@ -454,13 +458,13 @@
       cancelButtonText: 'إغلاق'
     }).then(r => {
       if (!r.isConfirmed) return;
-      downloadCSV(`كشف_${sess.subjectCode}_${date}.csv`, ['الكود', 'الاسم', 'الفرقة', 'نوع القيد', 'الحالة'],
+      downloadCSV(`كشف_${sess.subjectCode}_${sess.lectureNo ? 'محاضرة' + sess.lectureNo + '_' : ''}${date}.csv`, ['الكود', 'الاسم', 'الفرقة', 'نوع القيد', 'الحالة'],
         [...presentList.map(s => [s.code, s.name, s.grade, s.enrollType, 'حاضر']), ...absentList.map(s => [s.code, s.name, s.grade, s.enrollType, 'غائب'])]);
     });
   }
 
   // ==================== 2. ماسح الحضور ====================
-  const sc = { subject: null, cam: null, running: false, busy: false, last: '', lastAt: 0, count: 0, log: [], grade: '', term: '', q: '' };
+  const sc = { subject: null, cam: null, running: false, busy: false, last: '', lastAt: 0, count: 0, log: [], grade: '', term: '', q: '', lec: null };
 
   function allowedScanSubjects() {
     if (ME.role === 'doctor') return (ME.subjects || []).map(s => SUBJECTS.find(x => x.code === s.code) || s);
@@ -489,12 +493,12 @@
           </div>`}
         <div class="subj-grid" id="subjGrid"></div>
       </div>
+      <div class="card-x" id="lecCard" style="display:none"></div>
       <div class="row g-3" id="camArea" style="display:none">
         <div class="col-lg-7">
           <div class="card-x">
             <div class="card-head">
               <h3 class="card-title"><i class="fas fa-camera"></i> <span id="camTitle"></span></h3>
-              <div class="d-flex gap-2"><button class="btn btn-sm btn-soft" id="btnChange"><i class="fas fa-repeat me-1"></i> تغيير المادة</button><button class="btn btn-sm btn-outline-danger" id="btnStop"><i class="fas fa-stop me-1"></i> إيقاف</button></div>
             </div>
             <div id="reader"></div>
             <div class="scan-result idle" id="scanResult"><i class="fas fa-qrcode fa-2x mb-2"></i><div>وجّه الكاميرا نحو كارنيه الطالب</div></div>
@@ -530,11 +534,10 @@
       const b = e.target.closest('[data-code]');
       if (b) startSubject(allowed.find(s => s.code === b.dataset.code));
     });
-    document.getElementById('btnStop').addEventListener('click', () => { stopCamera(); showPicker(); });
-    document.getElementById('btnChange').addEventListener('click', () => { stopCamera(); showPicker(); });
+    document.getElementById('lecCard').addEventListener('click', onLectureAction);
     document.getElementById('xLog').addEventListener('click', () => {
       if (!sc.log.length) return toast('info', 'لا توجد تسجيلات بعد');
-      downloadCSV(`جلسة_${sc.subject ? sc.subject.code : ''}_${new Date().toISOString().slice(0, 10)}.csv`, ['الوقت', 'الطالب', 'الكود', 'النتيجة'], sc.log.map(l => [l.time, l.name, l.code, l.msg]));
+      downloadCSV(`جلسة_${sc.subject ? sc.subject.code : ''}_محاضرة${sc.lec && sc.lec.current ? sc.lec.current : ''}_${new Date().toISOString().slice(0, 10)}.csv`, ['الوقت', 'الطالب', 'الكود', 'النتيجة'], sc.log.map(l => [l.time, l.name, l.code, l.msg]));
     });
     drawLog();
     if (sc.subject && allowed.some(s => s.code === sc.subject.code)) startSubject(sc.subject);
@@ -542,9 +545,8 @@
 
   function showPicker() {
     const pick = document.getElementById('pickCard');
-    const cam = document.getElementById('camArea');
     if (pick) pick.style.display = '';
-    if (cam) cam.style.display = 'none';
+    ['lecCard', 'camArea'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
   }
 
   async function startSubject(subject) {
@@ -552,12 +554,124 @@
     if (!sc.subject || sc.subject.code !== subject.code) { sc.count = 0; sc.log = []; }
     sc.subject = subject;
     document.getElementById('pickCard').style.display = 'none';
-    document.getElementById('camArea').style.display = '';
-    document.getElementById('camTitle').textContent = `${subject.name} (${subject.code})`;
+    const card = document.getElementById('lecCard');
+    card.style.display = '';
+    card.innerHTML = `<div class="text-center text-muted-2 py-4"><span class="spin me-2"></span> جاري تحميل محاضرات ${esc(subject.name)}...</div>`;
     document.getElementById('scCount').textContent = sc.count;
     drawLog();
-    setResult('idle', '<i class="fas fa-qrcode fa-2x mb-2"></i><div>وجّه الكاميرا نحو كارنيه الطالب</div>');
-    await startCamera();
+    await refreshLectures();
+  }
+
+  // ===== المحاضرات 1 → 15: لا مسح إلا داخل محاضرة مفتوحة اليوم =====
+  async function refreshLectures() {
+    if (!sc.subject) return;
+    const card = document.getElementById('lecCard');
+    try {
+      sc.lec = await api('/api/lectures?subject=' + encodeURIComponent(sc.subject.code));
+    } catch (e) {
+      card.innerHTML = errorHtml(e.message);
+      return;
+    }
+    if (currentSection !== 'scanner') return;
+    drawLectures();
+    const cam = document.getElementById('camArea');
+    if (sc.lec.openToday) {
+      cam.style.display = '';
+      document.getElementById('camTitle').textContent = `${sc.subject.name} — المحاضرة رقم ${sc.lec.current}`;
+      if (!sc.running) {
+        setResult('idle', '<i class="fas fa-qrcode fa-2x mb-2"></i><div>وجّه الكاميرا نحو كارنيه الطالب</div>');
+        await startCamera();
+      }
+    } else {
+      await stopCamera();
+      cam.style.display = 'none';
+    }
+  }
+
+  function drawLectures() {
+    const L = sc.lec;
+    const done = L.lectures.filter(l => l.state === 'done').length;
+    const isSuper = ME.role === 'super_admin';
+    const tile = l => {
+      const map = {
+        done: ['lec-done', 'fa-circle-check', `${esc(l.endDate || l.startDate)}<br>${l.count} حاضر`],
+        open: ['lec-open', 'fa-tower-broadcast', 'مفتوحة الآن'],
+        next: ['lec-next', 'fa-lock-open', L.nextBlockedToday ? 'المرة القادمة' : 'التالية'],
+        locked: ['lec-locked', 'fa-lock', 'مقفولة']
+      };
+      const [cls, icon, sub] = map[l.state];
+      const tip = l.state === 'done' ? `بدأت ${l.startDate} ${l.startTime || ''} • انتهت ${l.endDate} ${l.endTime || ''} • ${l.endedBy || ''}` : l.state === 'open' ? `فتحها ${l.startedBy} الساعة ${l.startTime}` : '';
+      return `<div class="lec-tile ${cls}" title="${esc(tip)}"><i class="fas ${icon}"></i><div class="lec-no">${l.no}</div><div class="lec-sub">${sub}</div></div>`;
+    };
+    const lastDone = L.lectures.filter(l => l.state === 'done').pop();
+    const canReopen = isSuper && lastDone && !L.openToday && !L.staleOpen;
+    let action = '';
+    if (L.completed) {
+      action = `<div class="alert alert-success mb-0"><i class="fas fa-flag-checkered me-1"></i> تم إنهاء المحاضرات الـ 15 لهذه المادة.</div>`;
+    } else if (L.openToday) {
+      action = `<div class="lec-action open"><div><div class="fw-900">المحاضرة رقم ${L.current} مفتوحة الآن</div><div class="small">امسح كروت الطلاب، وعند انتهاء المحاضرة اضغط "تم إنهاء المحاضرة".</div></div>
+        <button class="btn btn-danger fw-800" data-lec="finish"><i class="fas fa-flag-checkered me-1"></i> تم إنهاء المحاضرة رقم ${L.current} اليوم</button></div>`;
+    } else if (L.staleOpen) {
+      const cur = L.lectures[L.current - 1];
+      action = `<div class="lec-action warn"><div><div class="fw-900">المحاضرة رقم ${L.current} مفتوحة منذ ${esc(cur.startDate)} ولم يتم إنهاؤها</div><div class="small">أنهها أولاً، ثم تُفتح المحاضرة التالية.</div></div>
+        <button class="btn btn-warning fw-800" data-lec="finish"><i class="fas fa-flag-checkered me-1"></i> إنهاء المحاضرة رقم ${L.current}</button></div>`;
+    } else if (L.nextBlockedToday) {
+      action = `<div class="lec-action info"><div><div class="fw-900"><i class="fas fa-lock me-1"></i> المحاضرة رقم ${L.current} تُفتح في المرة القادمة</div><div class="small">تم إنهاء المحاضرة رقم ${L.current - 1} اليوم. افتح المحاضرة رقم ${L.current} عندما يحين موعدها.</div></div>
+        ${isSuper ? `<button class="btn btn-outline-secondary btn-sm" data-lec="force"><i class="fas fa-key me-1"></i> فتح استثنائي اليوم</button>` : ''}</div>`;
+    } else {
+      action = `<div class="lec-action ready"><div><div class="fw-900">جاهز لبدء المحاضرة رقم ${L.current}</div><div class="small">بعد البدء تعمل الكاميرا ويتم تسجيل الحضور على المحاضرة رقم ${L.current}.</div></div>
+        <button class="btn btn-brand fw-800 px-4" data-lec="start"><i class="fas fa-play me-1"></i> بدء المحاضرة رقم ${L.current}</button></div>`;
+    }
+    document.getElementById('lecCard').innerHTML = `
+      <div class="card-head">
+        <div><h3 class="card-title"><i class="fas fa-list-ol"></i> ${esc(L.subject.name)} <code>${esc(L.subject.code)}</code></h3>
+          <div class="small text-muted-2 mt-1">${esc(L.subject.grade)} • ${esc(L.subject.term)} • ${done} من 15 محاضرة منتهية</div></div>
+        <button class="btn btn-sm btn-soft" data-lec="change"><i class="fas fa-repeat me-1"></i> تغيير المادة</button>
+      </div>
+      <div class="rate-bar mb-3" style="height:6px"><span style="width:${Math.round(done / 15 * 100)}%;background:var(--ok)"></span></div>
+      <div class="lec-grid mb-3">${L.lectures.map(tile).join('')}</div>
+      ${action}
+      ${canReopen ? `<div class="text-start mt-2"><button class="btn btn-link btn-sm text-muted-2 p-0" data-lec="reopen" data-no="${lastDone.no}"><i class="fas fa-rotate-left me-1"></i> إعادة فتح المحاضرة رقم ${lastDone.no} (للمشرف العام)</button></div>` : ''}`;
+  }
+
+  async function onLectureAction(e) {
+    const b = e.target.closest('[data-lec]');
+    if (!b || !sc.lec) return;
+    const act = b.dataset.lec;
+    const code = sc.subject.code;
+    const no = sc.lec.current;
+    if (act === 'change') { await stopCamera(); showPicker(); return; }
+    let body = null;
+    if (act === 'start') body = { action: 'start', subjectCode: code, lectureNo: no };
+    if (act === 'force') {
+      const c = await Swal.fire({ icon: 'warning', title: `فتح المحاضرة رقم ${no} اليوم؟`, text: 'تم عقد محاضرة لهذه المادة اليوم بالفعل. استخدم هذا فقط لو المادة لها محاضرتان في نفس اليوم.', showCancelButton: true, confirmButtonText: 'نعم، افتحها', cancelButtonText: 'إلغاء' });
+      if (!c.isConfirmed) return;
+      body = { action: 'start', subjectCode: code, lectureNo: no, force: true };
+    }
+    if (act === 'finish') {
+      const c = await Swal.fire({ icon: 'question', title: `إنهاء المحاضرة رقم ${no}؟`, html: `لن يمكن تسجيل حضور في هذه المحاضرة بعد إنهائها،<br>والمحاضرة رقم ${no + 1 <= 15 ? no + 1 : '—'} تُفتح في المرة القادمة.`, showCancelButton: true, confirmButtonText: 'نعم، تم إنهاء المحاضرة', cancelButtonText: 'إلغاء' });
+      if (!c.isConfirmed) return;
+      body = { action: 'finish', subjectCode: code, lectureNo: no };
+    }
+    if (act === 'reopen') {
+      const rn = parseInt(b.dataset.no, 10);
+      const c = await Swal.fire({ icon: 'warning', title: `إعادة فتح المحاضرة رقم ${rn}؟`, text: 'لتصحيح إنهاء بالخطأ. يمكن بعدها استكمال المسح ثم إنهاؤها مرة أخرى.', showCancelButton: true, confirmButtonText: 'إعادة فتح', cancelButtonText: 'إلغاء' });
+      if (!c.isConfirmed) return;
+      body = { action: 'reopen', subjectCode: code, lectureNo: rn };
+    }
+    if (!body) return;
+    b.disabled = true;
+    try {
+      const r = await api('/api/lectures', { method: 'POST', body });
+      if (act === 'finish') {
+        await stopCamera();
+        Swal.fire({ icon: 'success', title: r.message, text: 'المحاضرة التالية تُفتح في المرة القادمة.', timer: 2600, showConfirmButton: false });
+      } else toast('success', r.message);
+      if (act === 'start' || act === 'force') { sc.count = 0; sc.log = []; document.getElementById('scCount').textContent = 0; drawLog(); }
+    } catch (err) {
+      Swal.fire('تنبيه', err.message, 'warning');
+    }
+    await refreshLectures();
   }
 
   async function startCamera() {
@@ -641,7 +755,7 @@
         feedback(true);
         sc.count++;
         document.getElementById('scCount').textContent = sc.count;
-        setResult('ok', `<i class="fas fa-circle-check fa-2x mb-1"></i><div class="who">${esc(res.studentName)}</div><div><code>${esc(res.studentCode)}</code> • ${esc(res.studentGrade)} • ${esc(res.enrollType || '')}</div><div class="small mt-1">${esc(res.status)} • ${esc(res.time)}</div>`);
+        setResult('ok', `<i class="fas fa-circle-check fa-2x mb-1"></i><div class="who">${esc(res.studentName)}</div><div><code>${esc(res.studentCode)}</code> • ${esc(res.studentGrade)} • ${esc(res.enrollType || '')}</div><div class="small mt-1">${esc(res.status)} • المحاضرة رقم ${esc(res.lectureNo)} • ${esc(res.time)}</div>`);
         addLog(res.studentName, res.studentCode, res.status, 'ok', res.time);
       } else {
         feedback(false);
@@ -649,6 +763,7 @@
         const icon = res.type === 'forged' ? 'fa-user-secret' : res.type === 'duplicate' ? 'fa-clone' : 'fa-circle-xmark';
         setResult(kind, `<i class="fas ${icon} fa-2x mb-1"></i>${res.studentName ? `<div class="who">${esc(res.studentName)}</div>` : ''}<div class="fw-800">${esc(res.message)}</div>`);
         addLog(res.studentName || 'كارنيه مرفوض', res.studentCode || '', res.message, kind);
+        if (res.type === 'no_lecture') refreshLectures();
       }
     } catch (e) {
       feedback(false);

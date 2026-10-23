@@ -12,14 +12,17 @@ const STUDENT_STATUSES = ['عام', 'حالات خاصة', 'إبصار'];
 const ROLES = ['super_admin', 'doctor', 'leader'];
 const STATUS_PRESENT = 'حاضر';
 const STATUS_OTHER_GRADE = 'حاضر (من فرقة أخرى)';
+const MAX_LECTURES = 15;
+const LECTURE_STATUS = { locked: 'لم تبدأ', open: 'مفتوحة', done: 'منتهية' };
 
 const HEADERS = {
   Students: ['التوقيت', 'الاسم بالكامل', 'نوع القيد', 'الحالة', 'الفرقة الدراسية', 'كود الطالب', 'بيانات QR (موقعة)', 'نشط'],
-  Attendance: ['التوقيت', 'التاريخ', 'الساعة', 'اسم الطالب', 'كود الطالب', 'الفرقة الدراسية', 'الترم', 'كود المادة', 'اسم المادة', 'حالة الحضور', 'إيميل الدكتور/الأدمن'],
+  Attendance: ['التوقيت', 'التاريخ', 'الساعة', 'اسم الطالب', 'كود الطالب', 'الفرقة الدراسية', 'الترم', 'كود المادة', 'اسم المادة', 'حالة الحضور', 'إيميل الدكتور/الأدمن', 'رقم المحاضرة'],
   Admins: ['الإيميل', 'كلمة المرور (مشفرة)', 'الاسم', 'الدور', 'المواد المخصصة', 'الفرقة المخصصة', 'تاريخ الإضافة', 'نشط', 'يجب تغيير كلمة المرور', 'آخر دخول'],
-  AuditLog: ['التوقيت', 'المستخدم', 'الدور', 'الإجراء', 'التفاصيل', 'IP']
+  AuditLog: ['التوقيت', 'المستخدم', 'الدور', 'الإجراء', 'التفاصيل', 'IP'],
+  Lectures: ['كود المادة', 'اسم المادة', 'الفرقة', 'الترم', 'رقم المحاضرة', 'الحالة', 'تاريخ البدء', 'وقت البدء', 'بدأها', 'تاريخ الإنهاء', 'وقت الإنهاء', 'أنهاها', 'عدد الحضور']
 };
-const SUBJECT_HEADER = ['التوقيت', 'التاريخ', 'الساعة', 'اسم الطالب', 'كود الطالب', 'الفرقة الدراسية', 'الترم', 'حالة الحضور', 'إيميل الدكتور/الأدمن'];
+const SUBJECT_HEADER = ['التوقيت', 'التاريخ', 'الساعة', 'اسم الطالب', 'كود الطالب', 'الفرقة الدراسية', 'الترم', 'حالة الحضور', 'إيميل الدكتور/الأدمن', 'رقم المحاضرة'];
 
 class HttpError extends Error {
   constructor(status, message, extra) {
@@ -137,7 +140,7 @@ async function ensureSubjectSheet(tabTitle) {
   });
   await sheets.spreadsheets.values.update({
     spreadsheetId,
-    range: `'${tabTitle}'!A1:I1`,
+    range: `'${tabTitle}'!A1:J1`,
     valueInputOption: 'RAW',
     requestBody: { values: [SUBJECT_HEADER] }
   });
@@ -622,6 +625,145 @@ function canScanSubject(user, subject) {
   return allowedSubjectsFor(user).some(s => s.code === subject.code);
 }
 
+// ==================== المحاضرات (1 → 15 بالترتيب) ====================
+// تبويب Lectures فيه 15 صف لكل مادة. المحاضرة التالية لا تُفتح إلا بعد إنهاء السابقة وفي يوم لاحق
+function lectureKey(code, no) {
+  return `${String(code).toLowerCase()}#${no}`;
+}
+
+async function readLectureRows() {
+  const { sheets, spreadsheetId } = await ensureSheets();
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: 'Lectures!A2:M' });
+  return parseLectureRows(res.data.values || []);
+}
+
+function parseLectureRows(values) {
+  const map = {};
+  values.forEach((r, i) => {
+    const no = parseInt(r[4], 10);
+    if (!r[0] || !(no >= 1 && no <= MAX_LECTURES)) return;
+    map[lectureKey(r[0], no)] = {
+      row: i + 2, no, status: String(r[5] || LECTURE_STATUS.locked).trim(),
+      startDate: String(r[6] || '').trim(), startTime: r[7] || '', startedBy: r[8] || '',
+      endDate: String(r[9] || '').trim(), endTime: r[10] || '', endedBy: r[11] || '', count: parseInt(r[12], 10) || 0
+    };
+  });
+  return map;
+}
+
+function lectureRowValues(subject, l) {
+  return [subject.code, subject.name, subject.grade, subject.term, l.no, l.status, l.startDate, l.startTime, l.startedBy, l.endDate, l.endTime, l.endedBy, l.count || 0];
+}
+
+// حالة المحاضرات الـ 15 لمادة واحدة
+function buildLectures(subject, map) {
+  const list = [];
+  for (let no = 1; no <= MAX_LECTURES; no++) {
+    list.push(map[lectureKey(subject.code, no)] || { row: 0, no, status: LECTURE_STATUS.locked, startDate: '', startTime: '', startedBy: '', endDate: '', endTime: '', endedBy: '', count: 0 });
+  }
+  const current = list.find(l => l.status !== LECTURE_STATUS.done) || null;
+  const today = cairoNow().date;
+  const prev = current && current.no > 1 ? list[current.no - 2] : null;
+  return {
+    subject: { code: subject.code, name: subject.name, grade: subject.grade, term: subject.term },
+    lectures: list.map(l => ({
+      no: l.no, status: l.status, startDate: l.startDate, startTime: l.startTime, startedBy: l.startedBy,
+      endDate: l.endDate, endTime: l.endTime, endedBy: l.endedBy, count: l.count,
+      state: l.status === LECTURE_STATUS.done ? 'done' : l.status === LECTURE_STATUS.open ? 'open' : (current && l.no === current.no ? 'next' : 'locked')
+    })),
+    current: current ? current.no : null,
+    openToday: !!(current && current.status === LECTURE_STATUS.open && current.startDate === today),
+    staleOpen: !!(current && current.status === LECTURE_STATUS.open && current.startDate !== today),
+    nextBlockedToday: !!(current && current.status !== LECTURE_STATUS.open && prev && prev.startDate === today),
+    completed: !current,
+    today,
+    _list: list
+  };
+}
+
+function requireScanSubject(user, code) {
+  const subject = findSubject(code);
+  if (!subject) throw new HttpError(400, 'المادة غير موجودة في اللائحة');
+  if (!canScanSubject(user, subject)) throw new HttpError(403, 'غير مصرح لك بهذه المادة');
+  return subject;
+}
+
+async function getLectures(user, code) {
+  const subject = requireScanSubject(user, code);
+  const state = buildLectures(subject, await readLectureRows());
+  delete state._list;
+  return { success: true, ...state };
+}
+
+async function writeLecture(subject, l) {
+  const { sheets, spreadsheetId } = await ensureSheets();
+  if (l.row) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId, range: `Lectures!A${l.row}:M${l.row}`, valueInputOption: 'RAW', requestBody: { values: [lectureRowValues(subject, l)] }
+    });
+  } else {
+    await sheets.spreadsheets.values.append({
+      spreadsheetId, range: 'Lectures!A:M', valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS', requestBody: { values: [lectureRowValues(subject, l)] }
+    });
+  }
+}
+
+async function startLecture(user, code, no, force, ip) {
+  const subject = requireScanSubject(user, code);
+  const state = buildLectures(subject, await readLectureRows());
+  if (state.completed) throw new HttpError(400, `تم إنهاء المحاضرات الـ ${MAX_LECTURES} لهذه المادة`);
+  const cur = state._list[state.current - 1];
+  if (Number(no) !== cur.no) throw new HttpError(400, `المحاضرات بالترتيب: يجب بدء المحاضرة رقم ${cur.no} أولاً`);
+  const now = cairoNow();
+  if (cur.status === LECTURE_STATUS.open) {
+    if (cur.startDate === now.date) return { success: true, message: `المحاضرة رقم ${cur.no} مفتوحة بالفعل` };
+    throw new HttpError(400, `المحاضرة رقم ${cur.no} ما زالت مفتوحة منذ ${cur.startDate}. أنهها أولاً`);
+  }
+  if (state.nextBlockedToday) {
+    if (!(force && user.role === 'super_admin')) {
+      throw new HttpError(409, `المحاضرة رقم ${cur.no - 1} كانت اليوم. المحاضرة رقم ${cur.no} تُفتح في المرة القادمة (يوم آخر)`, { code: 'SAME_DAY', canForce: user.role === 'super_admin' });
+    }
+  }
+  Object.assign(cur, { status: LECTURE_STATUS.open, startDate: now.date, startTime: now.time, startedBy: user.email, endDate: '', endTime: '', endedBy: '', count: 0 });
+  await writeLecture(subject, cur);
+  await audit(user.email, user.role, 'بدء محاضرة', `${subject.code} - المحاضرة ${cur.no}${state.nextBlockedToday ? ' (فتح استثنائي في نفس اليوم)' : ''}`, ip);
+  return { success: true, message: `تم فتح المحاضرة رقم ${cur.no}` };
+}
+
+async function countLectureAttendance(subject, no) {
+  const { sheets, spreadsheetId } = await ensureSheets();
+  const tab = getSubjectSheetName(subject.code, subject.name);
+  if (!knownTabs.has(tab)) return 0;
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: `'${tab}'!E2:J` });
+  return new Set((res.data.values || []).filter(r => String(r[5] || '').trim() === String(no)).map(r => r[0])).size;
+}
+
+async function finishLecture(user, code, no, ip) {
+  const subject = requireScanSubject(user, code);
+  const state = buildLectures(subject, await readLectureRows());
+  const l = state._list[Number(no) - 1];
+  if (!l || l.status !== LECTURE_STATUS.open) throw new HttpError(400, 'هذه المحاضرة ليست مفتوحة');
+  const now = cairoNow();
+  Object.assign(l, { status: LECTURE_STATUS.done, endDate: now.date, endTime: now.time, endedBy: user.email, count: await countLectureAttendance(subject, l.no) });
+  await writeLecture(subject, l);
+  await audit(user.email, user.role, 'إنهاء محاضرة', `${subject.code} - المحاضرة ${l.no} (${l.count} حاضر)`, ip);
+  return { success: true, count: l.count, message: `تم إنهاء المحاضرة رقم ${l.no} (${l.count} حاضر)` };
+}
+
+async function reopenLecture(user, code, no, ip) {
+  if (user.role !== 'super_admin') throw new HttpError(403, 'إعادة فتح المحاضرات للمشرف العام فقط');
+  const subject = requireScanSubject(user, code);
+  const state = buildLectures(subject, await readLectureRows());
+  const l = state._list[Number(no) - 1];
+  const next = state._list[Number(no)];
+  if (!l || l.status !== LECTURE_STATUS.done) throw new HttpError(400, 'يمكن إعادة فتح محاضرة منتهية فقط');
+  if (next && next.status !== LECTURE_STATUS.locked) throw new HttpError(400, 'لا يمكن إعادة فتحها بعد بدء المحاضرة التالية');
+  Object.assign(l, { status: LECTURE_STATUS.open, startDate: cairoNow().date, endDate: '', endTime: '', endedBy: '' });
+  await writeLecture(subject, l);
+  await audit(user.email, user.role, 'إعادة فتح محاضرة', `${subject.code} - المحاضرة ${l.no}`, ip);
+  return { success: true, message: `تمت إعادة فتح المحاضرة رقم ${l.no}` };
+}
+
 // ==================== رصد الحضور ====================
 const inFlight = new Set();
 
@@ -674,26 +816,37 @@ async function recordAttendance(user, payload, ip) {
     await ensureSubjectSheet(tab);
     const { sheets, spreadsheetId } = await ensureSheets();
 
-    const existing = await sheets.spreadsheets.values.get({ spreadsheetId, range: `'${tab}'!B2:E` });
-    const prev = (existing.data.values || []).find(r => String(r[0] || '').trim() === now.date && String(r[3] || '').trim() === student.code);
+    const both = await sheets.spreadsheets.values.batchGet({ spreadsheetId, ranges: ['Lectures!A2:M', `'${tab}'!B2:J`] });
+    const lecState = buildLectures(subject, parseLectureRows(both.data.valueRanges[0].values || []));
+    if (!lecState.openToday) {
+      return {
+        success: false,
+        type: 'no_lecture',
+        message: lecState.completed ? `تم إنهاء المحاضرات الـ ${MAX_LECTURES} لهذه المادة` : lecState.staleOpen ? `المحاضرة رقم ${lecState.current} مفتوحة من يوم سابق. أنهها ثم ابدأ المحاضرة التالية` : 'لا توجد محاضرة مفتوحة الآن. ابدأ المحاضرة أولاً'
+      };
+    }
+    const lectureNo = lecState.current;
+
+    const prev = (both.data.valueRanges[1].values || []).find(r => String(r[3] || '').trim() === student.code &&
+      (String(r[8] || '').trim() === String(lectureNo) || String(r[0] || '').trim() === now.date));
     if (prev) {
       return {
         success: false,
         type: 'duplicate',
         studentName: student.name,
         studentCode: student.code,
-        message: `تم تسجيل حضور ${student.name} في (${subject.name}) اليوم مسبقاً الساعة ${prev[1] || ''}`
+        message: `تم تسجيل حضور ${student.name} في المحاضرة رقم ${prev[8] || lectureNo} مسبقاً الساعة ${prev[1] || ''}`
       };
     }
 
     const status = otherGrade ? STATUS_OTHER_GRADE : STATUS_PRESENT;
     await sheets.spreadsheets.values.append({
-      spreadsheetId, range: `'${tab}'!A:I`, valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS',
-      requestBody: { values: [[now.stamp, now.date, now.time, student.name, student.code, student.grade, subject.term, status, user.email]] }
+      spreadsheetId, range: `'${tab}'!A:J`, valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS',
+      requestBody: { values: [[now.stamp, now.date, now.time, student.name, student.code, student.grade, subject.term, status, user.email, lectureNo]] }
     });
     await sheets.spreadsheets.values.append({
-      spreadsheetId, range: 'Attendance!A:K', valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS',
-      requestBody: { values: [[now.stamp, now.date, now.time, student.name, student.code, student.grade, subject.term, subject.code, subject.name, status, user.email]] }
+      spreadsheetId, range: 'Attendance!A:L', valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS',
+      requestBody: { values: [[now.stamp, now.date, now.time, student.name, student.code, student.grade, subject.term, subject.code, subject.name, status, user.email, lectureNo]] }
     });
 
     return {
@@ -705,6 +858,7 @@ async function recordAttendance(user, payload, ip) {
       studentGrade: student.grade,
       enrollType: student.enrollType,
       subjectName: subject.name,
+      lectureNo,
       status,
       time: now.time
     };
@@ -722,7 +876,7 @@ async function loadRecordsForSubjects(scope) {
   const { sheets, spreadsheetId } = await ensureSheets();
   const codes = new Set(scope.map(s => s.code.toLowerCase()));
   if (scope.length <= 4) {
-    const ranges = scope.map(s => `'${getSubjectSheetName(s.code, s.name)}'!A2:I`);
+    const ranges = scope.map(s => `'${getSubjectSheetName(s.code, s.name)}'!A2:J`);
     const existingRanges = ranges.filter((r, i) => knownTabs.has(getSubjectSheetName(scope[i].code, scope[i].name)));
     if (!existingRanges.length) return [];
     const res = await sheets.spreadsheets.values.batchGet({ spreadsheetId, ranges: existingRanges });
@@ -732,18 +886,18 @@ async function loadRecordsForSubjects(scope) {
       const subj = scope.find(s => getSubjectSheetName(s.code, s.name) === title);
       (vr.values || []).forEach(r => out.push({
         stamp: r[0] || '', date: String(r[1] || '').trim(), time: r[2] || '', studentName: r[3] || '', studentCode: String(r[4] || '').trim(),
-        grade: r[5] || '', term: r[6] || '', status: r[7] || STATUS_PRESENT, recorder: r[8] || '',
+        grade: r[5] || '', term: r[6] || '', status: r[7] || STATUS_PRESENT, recorder: r[8] || '', lectureNo: parseInt(r[9], 10) || 0,
         subjectCode: subj ? subj.code : '', subjectName: subj ? subj.name : ''
       }));
     });
     return out;
   }
-  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: 'Attendance!A2:K' });
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: 'Attendance!A2:L' });
   return (res.data.values || []).map(r => {
     const subj = findSubject(r[7]);
     return {
       stamp: r[0] || '', date: String(r[1] || '').trim(), time: r[2] || '', studentName: r[3] || '', studentCode: String(r[4] || '').trim(),
-      grade: r[5] || '', term: r[6] || '', status: r[9] || STATUS_PRESENT, recorder: r[10] || '',
+      grade: r[5] || '', term: r[6] || '', status: r[9] || STATUS_PRESENT, recorder: r[10] || '', lectureNo: parseInt(r[11], 10) || 0,
       subjectCode: subj ? subj.code : String(r[7] || ''), subjectName: subj ? subj.name : String(r[8] || '')
     };
   }).filter(r => codes.has(String(r.subjectCode).toLowerCase()));
@@ -762,7 +916,7 @@ async function getAnalytics(user, q = {}) {
   const threshold = Math.min(100, Math.max(1, parseInt(q.threshold, 10) || 75));
 
   await ensureSheets();
-  const [allStudents, rawRecords] = await Promise.all([readStudents(), scope.length ? loadRecordsForSubjects(scope) : []]);
+  const [allStudents, rawRecords, lectureMap] = await Promise.all([readStudents(), scope.length ? loadRecordsForSubjects(scope) : [], readLectureRows()]);
   const records = rawRecords.filter(r => r.studentCode && isDate(r.date) && (!from || r.date >= from) && (!to || r.date <= to));
 
   const scopeGrades = new Set(scope.map(s => s.grade));
@@ -770,24 +924,27 @@ async function getAnalytics(user, q = {}) {
   const enrolledByGrade = {};
   students.forEach(s => { enrolledByGrade[s.grade] = (enrolledByGrade[s.grade] || 0) + 1; });
 
-  // سجل واحد لكل (طالب، مادة، يوم)
+  // المحاضرة = رقم المحاضرة (أو التاريخ للسجلات القديمة). سجل واحد لكل (طالب، مادة، محاضرة)
+  const sessionKey = r => (r.lectureNo ? `L${r.lectureNo}` : `D${r.date}`);
   const seen = new Set();
   const unique = [];
   records.forEach(r => {
-    const k = `${r.studentCode}|${r.subjectCode}|${r.date}`;
+    const k = `${r.studentCode}|${r.subjectCode}|${sessionKey(r)}`;
     if (!seen.has(k)) { seen.add(k); unique.push(r); }
   });
 
   const subjMap = {};
-  scope.forEach(s => { subjMap[s.code] = { ...s, dates: new Set(), present: 0, presentOwnGrade: 0, otherGrade: 0, perDate: {} }; });
+  scope.forEach(s => { subjMap[s.code] = { ...s, keys: new Set(), present: 0, presentOwnGrade: 0, otherGrade: 0, perSession: {} }; });
   const studentHits = {};
   unique.forEach(r => {
     const sm = subjMap[r.subjectCode];
     if (!sm) return;
-    sm.dates.add(r.date);
+    const key = sessionKey(r);
+    sm.keys.add(key);
     sm.present++;
-    if (!sm.perDate[r.date]) sm.perDate[r.date] = [];
-    sm.perDate[r.date].push(r.studentCode);
+    if (!sm.perSession[key]) sm.perSession[key] = { lectureNo: r.lectureNo, date: r.date, codes: [] };
+    if (r.date < sm.perSession[key].date) sm.perSession[key].date = r.date;
+    sm.perSession[key].codes.push(r.studentCode);
     if (String(r.grade).trim() === sm.grade) sm.presentOwnGrade++; else sm.otherGrade++;
     if (!studentHits[r.studentCode]) studentHits[r.studentCode] = { total: 0, bySubject: {}, last: '' };
     const h = studentHits[r.studentCode];
@@ -798,12 +955,19 @@ async function getAnalytics(user, q = {}) {
 
   const singleSubject = scope.length === 1;
   const subjects = Object.values(subjMap).map(sm => {
-    const sessions = sm.dates.size;
+    const sessions = sm.keys.size;
     const enrolled = enrolledByGrade[sm.grade] || 0;
     const rate = sessions && enrolled ? Math.min(100, Math.round((sm.presentOwnGrade / (sessions * enrolled)) * 100)) : 0;
+    let lecturesDone = 0;
+    let currentLecture = null;
+    for (let no = 1; no <= MAX_LECTURES; no++) {
+      const l = lectureMap[lectureKey(sm.code, no)];
+      if (l && l.status === LECTURE_STATUS.done) lecturesDone++;
+      else if (currentLecture === null) currentLecture = no;
+    }
     return {
       code: sm.code, name: sm.name, grade: sm.grade, term: sm.term,
-      sessions, enrolled, present: sm.present, otherGrade: sm.otherGrade,
+      sessions, enrolled, present: sm.present, otherGrade: sm.otherGrade, lecturesDone, currentLecture,
       attendanceRate: rate, absenceRate: sessions && enrolled ? 100 - rate : 0
     };
   }).sort((a, b) => b.present - a.present || a.code.localeCompare(b.code));
@@ -811,14 +975,13 @@ async function getAnalytics(user, q = {}) {
   const sessions = [];
   Object.values(subjMap).forEach(sm => {
     const enrolled = enrolledByGrade[sm.grade] || 0;
-    Object.keys(sm.perDate).forEach(date => {
-      const codes = sm.perDate[date];
-      const item = { subjectCode: sm.code, subjectName: sm.name, grade: sm.grade, date, present: codes.length, enrolled, absent: Math.max(0, enrolled - codes.length) };
-      if (singleSubject) item.presentCodes = codes;
+    Object.entries(sm.perSession).forEach(([key, ps]) => {
+      const item = { key, lectureNo: ps.lectureNo, subjectCode: sm.code, subjectName: sm.name, grade: sm.grade, date: ps.date, present: ps.codes.length, enrolled, absent: Math.max(0, enrolled - ps.codes.length) };
+      if (singleSubject) item.presentCodes = ps.codes;
       sessions.push(item);
     });
   });
-  sessions.sort((a, b) => b.date.localeCompare(a.date));
+  sessions.sort((a, b) => b.date.localeCompare(a.date) || b.lectureNo - a.lectureNo);
 
   const sessionsBySubject = {};
   subjects.forEach(s => { sessionsBySubject[s.code] = s.sessions; });
@@ -867,11 +1030,86 @@ async function getAnalytics(user, q = {}) {
   };
 }
 
+// ترقيم المحاضرات للسجلات القديمة + تجهيز 15 صف لكل مادة في تبويب Lectures
+async function backfillLectures() {
+  const { sheets, spreadsheetId } = await ensureSheets();
+  const summary = { lectureRows: 0, numberedRecords: 0 };
+  const tabs = SUBJECTS.filter(s => knownTabs.has(getSubjectSheetName(s.code, s.name)));
+  const subjRes = await sheets.spreadsheets.values.batchGet({ spreadsheetId, ranges: tabs.map(s => `'${getSubjectSheetName(s.code, s.name)}'!A2:J`) });
+  const lectureMap = await readLectureRows();
+  const byDate = {}; // code -> date -> no
+  const data = [];
+  const historical = {}; // code#no -> {date, codes:Set}
+
+  (subjRes.data.valueRanges || []).forEach((vr, i) => {
+    const s = tabs[i];
+    const rows = vr.values || [];
+    const map = {};
+    let maxNo = 0;
+    rows.forEach(r => {
+      const no = parseInt(r[9], 10);
+      if (no) { map[String(r[1]).trim()] = no; maxNo = Math.max(maxNo, no); }
+    });
+    [...new Set(rows.filter(r => !parseInt(r[9], 10) && isDate(String(r[1]).trim())).map(r => String(r[1]).trim()))].sort().forEach(d => {
+      if (!map[d] && maxNo < MAX_LECTURES) map[d] = ++maxNo;
+    });
+    byDate[s.code.toLowerCase()] = map;
+    let changed = false;
+    const col = rows.map(r => {
+      let no = parseInt(r[9], 10);
+      if (!no && map[String(r[1]).trim()]) { no = map[String(r[1]).trim()]; changed = true; summary.numberedRecords++; }
+      if (no) {
+        const k = lectureKey(s.code, no);
+        if (!historical[k]) historical[k] = { date: String(r[1]).trim(), codes: new Set() };
+        historical[k].codes.add(r[4]);
+      }
+      return [no || ''];
+    });
+    const tab = getSubjectSheetName(s.code, s.name);
+    data.push({ range: `'${tab}'!J1`, values: [['رقم المحاضرة']] });
+    if (changed) data.push({ range: `'${tab}'!J2:J${rows.length + 1}`, values: col });
+  });
+
+  const att = await sheets.spreadsheets.values.get({ spreadsheetId, range: 'Attendance!A2:L' });
+  const attRows = att.data.values || [];
+  let attChanged = false;
+  const attCol = attRows.map(r => {
+    const existing = parseInt(r[11], 10);
+    if (existing) return [existing];
+    const subj = findSubject(r[7]);
+    const no = subj && byDate[subj.code.toLowerCase()] ? byDate[subj.code.toLowerCase()][String(r[1]).trim()] : 0;
+    if (no) attChanged = true;
+    return [no || ''];
+  });
+  if (attChanged) data.push({ range: `Attendance!L2:L${attRows.length + 1}`, values: attCol });
+  for (let i = 0; i < data.length; i += 200) {
+    await sheets.spreadsheets.values.batchUpdate({ spreadsheetId, requestBody: { valueInputOption: 'RAW', data: data.slice(i, i + 200) } });
+  }
+
+  // صفوف المحاضرات الناقصة: المحاضرات التي لها سجلات قديمة تُسجل كمنتهية
+  const append = [];
+  SUBJECTS.forEach(s => {
+    for (let no = 1; no <= MAX_LECTURES; no++) {
+      const k = lectureKey(s.code, no);
+      if (lectureMap[k]) continue;
+      const h = historical[k];
+      append.push(lectureRowValues(s, h
+        ? { no, status: LECTURE_STATUS.done, startDate: h.date, startTime: '', startedBy: 'ترقيم تلقائي', endDate: h.date, endTime: '', endedBy: 'ترقيم تلقائي', count: h.codes.size }
+        : { no, status: LECTURE_STATUS.locked, startDate: '', startTime: '', startedBy: '', endDate: '', endTime: '', endedBy: '', count: 0 }));
+    }
+  });
+  if (append.length) {
+    await sheets.spreadsheets.values.append({ spreadsheetId, range: 'Lectures!A:M', valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS', requestBody: { values: append } });
+  }
+  summary.lectureRows = append.length;
+  return summary;
+}
+
 // ==================== إعداد وتأمين الشيت ====================
 async function setupAndSecure(actor, ip) {
   ensured = false;
   const { sheets, spreadsheetId } = await ensureSheets();
-  const summary = { createdTabs: 0, protectedTabs: 0, hashedPasswords: 0, resignedCards: 0 };
+  const summary = { createdTabs: 0, protectedTabs: 0, hashedPasswords: 0, resignedCards: 0, lectureRows: 0, numberedRecords: 0 };
 
   // 1) إنشاء تبويبات المواد الناقصة
   const missing = [];
@@ -887,11 +1125,14 @@ async function setupAndSecure(actor, ip) {
     });
     await sheets.spreadsheets.values.batchUpdate({
       spreadsheetId,
-      requestBody: { valueInputOption: 'RAW', data: chunk.map(t => ({ range: `'${t}'!A1:I1`, values: [SUBJECT_HEADER] })) }
+      requestBody: { valueInputOption: 'RAW', data: chunk.map(t => ({ range: `'${t}'!A1:J1`, values: [SUBJECT_HEADER] })) }
     });
     chunk.forEach(t => knownTabs.add(t));
   }
   summary.createdTabs = missing.length;
+
+  // 1-ب) ترقيم المحاضرات وتجهيز تبويب Lectures
+  Object.assign(summary, await backfillLectures());
 
   // 2) تنسيق العناوين + حماية كل التبويبات (التعديل فقط لحساب الخدمة ومالك الشيت)
   const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets(properties(sheetId,title),protectedRanges(protectedRangeId,description))' });
@@ -978,6 +1219,10 @@ module.exports = {
   deleteStudents,
   allowedSubjectsFor,
   recordAttendance,
+  getLectures,
+  startLecture,
+  finishLecture,
+  reopenLecture,
   getAnalytics,
   setupAndSecure
 };

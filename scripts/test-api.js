@@ -106,8 +106,20 @@ function client() {
   check('الدكتور لا يستطيع حذف طلاب', r.status === 403);
   r = await dr('POST', '/api/attendance', { qrData: buildQrPayload('SOC-2026-G1-0001'), subjectCode: 'soc111' });
   check('الدكتور لا يرصد مادة غير مسندة له', r.status === 403);
+  console.log('\n[5-ب] المحاضرات 1 → 15 بالترتيب');
+  const lec = (c, b) => c('POST', '/api/lectures', b);
   r = await dr('POST', '/api/attendance', { qrData: buildQrPayload('SOC-2026-G1-0001'), subjectCode: 'soc112' });
-  check('الدكتور يرصد مادته', r.status === 200 && r.data.success, r.data);
+  check('لا رصد بدون محاضرة مفتوحة', r.data.type === 'no_lecture', r.data);
+  r = await dr('GET', '/api/lectures?subject=soc112');
+  check('15 محاضرة والحالية رقم 1 والباقي مقفول', r.data.lectures.length === 15 && r.data.current === 1 && r.data.lectures[0].state === 'next' && r.data.lectures[1].state === 'locked', r.data);
+  r = await dr('GET', '/api/lectures?subject=soc111');
+  check('الدكتور لا يرى محاضرات مادة غير مادته', r.status === 403);
+  r = await lec(dr, { action: 'start', subjectCode: 'soc112', lectureNo: 2 });
+  check('لا يمكن بدء المحاضرة 2 قبل 1', r.status === 400, r.data);
+  r = await lec(dr, { action: 'start', subjectCode: 'soc112', lectureNo: 1 });
+  check('بدء المحاضرة 1', r.status === 200, r.data);
+  r = await dr('POST', '/api/attendance', { qrData: buildQrPayload('SOC-2026-G1-0001'), subjectCode: 'soc112' });
+  check('الدكتور يرصد مادته', r.status === 200 && r.data.success && r.data.lectureNo === 1, r.data);
 
   console.log('\n[6] مكافحة الغش في الحضور');
   r = await dr('POST', '/api/attendance', { qrData: buildQrPayload('SOC-2026-G1-0001'), subjectCode: 'soc112' });
@@ -129,6 +141,27 @@ function client() {
   r = await dr('POST', '/api/attendance', { qrData: buildQrPayload('SOC-2026-G1-0003'), subjectCode: 'soc112', subjectName: 'اسم مزيف', selectedGrade: 'الفرقة الرابعة' });
   check('اسم المادة والفرقة من السيرفر لا من المتصفح', r.data.success && r.data.subjectName === 'علم النفس الاجتماعي', r.data);
 
+  console.log('\n[6-ب] إنهاء المحاضرة وقفل التالية');
+  r = await lec(dr, { action: 'finish', subjectCode: 'soc112', lectureNo: 1 });
+  check('إنهاء المحاضرة 1 مع عدد الحضور', r.status === 200 && r.data.count === 3, r.data);
+  r = await dr('POST', '/api/attendance', { qrData: buildQrPayload('SOC-2026-G1-0004'), subjectCode: 'soc112' });
+  check('لا رصد بعد إنهاء المحاضرة', r.data.type === 'no_lecture', r.data);
+  r = await lec(dr, { action: 'start', subjectCode: 'soc112', lectureNo: 2 });
+  check('المحاضرة 2 لا تفتح في نفس اليوم', r.status === 409 && r.data.code === 'SAME_DAY' && r.data.canForce === false, r.data);
+  r = await lec(dr, { action: 'reopen', subjectCode: 'soc112', lectureNo: 1 });
+  check('الدكتور لا يعيد فتح محاضرة', r.status === 403);
+  r = await sa('GET', '/api/lectures?subject=soc112');
+  check('الحالة: 1 منتهية و 2 التالية ومقفولة اليوم', r.data.lectures[0].state === 'done' && r.data.current === 2 && r.data.nextBlockedToday === true, r.data);
+  r = await lec(sa, { action: 'reopen', subjectCode: 'soc112', lectureNo: 1 });
+  check('المشرف العام يعيد فتح المحاضرة 1', r.status === 200, r.data);
+  r = await lec(sa, { action: 'finish', subjectCode: 'soc112', lectureNo: 1 });
+  r = await lec(sa, { action: 'start', subjectCode: 'soc112', lectureNo: 2, force: true });
+  check('المشرف العام يفتح المحاضرة 2 استثنائياً', r.status === 200, r.data);
+  r = await sa('POST', '/api/attendance', { qrData: buildQrPayload('SOC-2026-G1-0001'), subjectCode: 'soc112' });
+  check('نفس الطالب في نفس اليوم مرفوض حتى في محاضرة أخرى', r.data.type === 'duplicate', r.data);
+  r = await lec(sa, { action: 'finish', subjectCode: 'soc112', lectureNo: 2 });
+  check('إنهاء المحاضرة 2', r.status === 200);
+
   console.log('\n[7] صلاحيات الليدر');
   const ld = client();
   r = await ld('POST', '/api/auth', { action: 'login', email: 'leader@test.edu', password: 'LeadLegacy123' });
@@ -140,6 +173,10 @@ function client() {
   check('الليدر لا يرى الطلاب', r.status === 403);
   r = await ld('DELETE', '/api/students', { codes: ['SOC-2026-G1-0001'] });
   check('الليدر لا يستطيع حذف طلاب', r.status === 403);
+  r = await lec(ld, { action: 'start', subjectCode: 'soc211', lectureNo: 1 });
+  check('الليدر لا يفتح محاضرة خارج فرقته', r.status === 403);
+  r = await lec(ld, { action: 'start', subjectCode: 'soc118', lectureNo: 1 });
+  check('الليدر يفتح المحاضرة', r.status === 200, r.data);
   r = await ld('POST', '/api/attendance', { qrData: buildQrPayload('SOC-2026-G1-0006'), subjectCode: 'soc118' });
   check('الليدر يرصد أي مادة في فرقته', r.data.success, r.data);
   r = await ld('POST', '/api/attendance', { qrData: buildQrPayload('SOC-2026-G2-0040'), subjectCode: 'soc211' });
@@ -170,6 +207,7 @@ function client() {
   check('رفض فرقة غير صالحة', r.status === 400);
   r = await pub('POST', '/api/students', { name: 'بوت سبام هنا', grade: 'الفرقة الأولى', enrollType: 'انتظام', status: 'عام', website: 'spam' });
   check('Honeypot يوقف البوتات', r.status === 400);
+  await lec(sa, { action: 'start', subjectCode: 'soc311', lectureNo: 1 });
   r = await sa('POST', '/api/attendance', { qrData: newQr, subjectCode: 'soc311' });
   check('الطالب الجديد يُرصد فوراً', r.data.success, r.data);
   let limited = false;
@@ -213,9 +251,13 @@ function client() {
   r = await sa('DELETE', '/api/students', { codes: [] });
   check('حذف بدون تحديد مرفوض', r.status === 400);
   r = await sa('POST', '/api/setup', {});
-  check('تأمين الشيت: قفل التبويبات وتشفير كلمات المرور', r.status === 200 && r.data.protectedTabs >= 80 && r.data.hashedPasswords >= 1 && r.data.createdTabs > 70, r.data);
+  check('تأمين الشيت: قفل التبويبات وتشفير كلمات المرور', r.status === 200 && r.data.protectedTabs >= 80 && r.data.hashedPasswords >= 1 && r.data.createdTabs > 70 && r.data.lectureRows > 1100 && r.data.numberedRecords > 200, r.data);
   r = await sa('POST', '/api/setup', {});
-  check('التأمين آمن للتكرار', r.status === 200 && r.data.protectedTabs === 0 && r.data.createdTabs === 0, r.data);
+  check('التأمين آمن للتكرار', r.status === 200 && r.data.protectedTabs === 0 && r.data.createdTabs === 0 && r.data.lectureRows === 0 && r.data.numberedRecords === 0, r.data);
+  r = await sa('GET', '/api/lectures?subject=soc111');
+  check('ترقيم السجلات القديمة: soc111 المحاضرات 1-3 منتهية والحالية 4', r.data.lectures.slice(0, 3).every(l => l.state === 'done' && l.count > 0) && r.data.current === 4, r.data.current);
+  r = await sa('GET', '/api/analytics?subject=soc111');
+  check('الإحصائيات بأرقام المحاضرات', r.data.sessions.map(x => x.lectureNo).sort().join() === '1,2,3' && r.data.subjects[0].lecturesDone === 3, r.data.sessions.map(x => x.lectureNo));
   r = await sa('GET', '/api/admins?audit=1');
   check('سجل العمليات يسجل الكارنيه المزور ومحاولات الدخول', r.status === 200 && r.data.logs.some(l => /مزور/.test(l.action)) && r.data.logs.some(l => /فشل/.test(l.action)));
   r = await sa('POST', '/api/auth', { action: 'logout' });

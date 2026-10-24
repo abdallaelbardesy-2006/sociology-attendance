@@ -1224,14 +1224,7 @@
   function renderSettings() {
     main.innerHTML = `
       <div class="page-title"><h2>الإعدادات والأمان</h2></div>
-      <div class="card-x">
-        <div class="card-head mb-0">
-          <div><h3 class="card-title"><i class="fas fa-user-plus"></i> تسجيل الطلاب الجدد</h3>
-            <div class="small text-muted-2 mt-1">اغلق التسجيل بعد انتهاء فترة التسجيل لمنع أي تسجيلات وهمية. الكارنيهات المسجلة تظل تعمل.</div></div>
-          <div class="form-check form-switch fs-5 m-0"><input class="form-check-input" type="checkbox" role="switch" id="regToggle" disabled></div>
-        </div>
-        <div id="regState" class="small mt-2 text-muted-2"><span class="spin me-1"></span> جاري التحميل...</div>
-      </div>
+      <div id="switchCards"></div>
       <div class="card-x">
         <h3 class="card-title mb-3"><i class="fas fa-shield-halved"></i> الحماية المفعّلة في النظام</h3>
         <ul class="small lh-lg mb-0">
@@ -1249,21 +1242,38 @@
         <button class="btn btn-brand" id="runSetup"><i class="fas fa-lock me-1"></i> تشغيل الفحص والتأمين الآن</button>
         <div id="setupOut" class="mt-3"></div>
       </div>`;
-    const regToggle = document.getElementById('regToggle');
-    const showReg = open => {
-      regToggle.checked = open;
-      regToggle.disabled = false;
-      document.getElementById('regState').innerHTML = open ? '<span class="pill pill-ok"><i class="fas fa-lock-open"></i> التسجيل مفتوح للطلاب</span>' : '<span class="pill pill-bad"><i class="fas fa-lock"></i> التسجيل مغلق</span>';
+    // مفاتيح التشغيل/الإيقاف للصفحة العامة
+    const SWITCH_UI = [
+      { key: 'registrationOpen', icon: 'fa-user-plus', title: 'تسجيل الطلاب الجدد', hint: 'اغلق التسجيل بعد انتهاء فترة التسجيل لمنع أي تسجيلات وهمية. الكارنيهات المسجلة تظل تعمل.', on: 'التسجيل مفتوح للطلاب', off: 'التسجيل مغلق' },
+      { key: 'lookupOpen', icon: 'fa-magnifying-glass', title: 'استرجاع الكارنيه بالاسم', hint: 'يسمح للطالب الذي فقد الكارنيه بالبحث باسمه الكامل وفرقته. البحث محدود المحاولات ومسجل في سجل العمليات.', on: 'الاسترجاع متاح للطلاب', off: 'الاسترجاع متوقف' }
+    ];
+    document.getElementById('switchCards').innerHTML = SWITCH_UI.map(sw => `
+      <div class="card-x">
+        <div class="card-head mb-0">
+          <div><h3 class="card-title"><i class="fas ${sw.icon}"></i> ${sw.title}</h3><div class="small text-muted-2 mt-1">${sw.hint}</div></div>
+          <div class="form-check form-switch fs-5 m-0"><input class="form-check-input" type="checkbox" role="switch" data-switch="${sw.key}" disabled></div>
+        </div>
+        <div class="small mt-2 text-muted-2" data-switch-state="${sw.key}"><span class="spin me-1"></span> جاري التحميل...</div>
+      </div>`).join('');
+    const showSwitch = (key, open) => {
+      const sw = SWITCH_UI.find(x => x.key === key);
+      const input = document.querySelector(`[data-switch="${key}"]`);
+      input.checked = open;
+      input.disabled = false;
+      document.querySelector(`[data-switch-state="${key}"]`).innerHTML = open ? `<span class="pill pill-ok"><i class="fas fa-lock-open"></i> ${sw.on}</span>` : `<span class="pill pill-bad"><i class="fas fa-lock"></i> ${sw.off}</span>`;
     };
-    api('/api/admins?settings=1').then(r => showReg(r.settings.registrationOpen)).catch(e => { document.getElementById('regState').textContent = e.message; });
-    regToggle.addEventListener('change', async () => {
-      const open = regToggle.checked;
-      regToggle.disabled = true;
+    api('/api/admins?settings=1').then(r => SWITCH_UI.forEach(sw => showSwitch(sw.key, r.settings[sw.key] !== false)))
+      .catch(e => document.querySelectorAll('[data-switch-state]').forEach(el => { el.textContent = e.message; }));
+    document.getElementById('switchCards').addEventListener('change', async e => {
+      const key = e.target.dataset.switch;
+      if (!key) return;
+      const open = e.target.checked;
+      e.target.disabled = true;
       try {
-        const r = await api('/api/admins', { method: 'POST', body: { action: 'setRegistration', open } });
-        showReg(r.registrationOpen);
+        const r = await api('/api/admins', { method: 'POST', body: { action: 'setSetting', key, open } });
+        showSwitch(key, r.open);
         toast('success', r.message);
-      } catch (err) { showReg(!open); say('error', 'خطأ', err.message); }
+      } catch (err) { showSwitch(key, !open); say('error', 'خطأ', err.message); }
     });
     document.getElementById('runSetup').addEventListener('click', async e => {
       const btn = e.currentTarget;

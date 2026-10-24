@@ -511,23 +511,37 @@ async function readSettings(fresh = false) {
   return map;
 }
 
+// مفاتيح قابلة للتشغيل/الإيقاف من الإعدادات (الافتراضي: مفتوح)
+const SWITCHES = {
+  registrationOpen: { on: 'فتح تسجيل الطلاب', off: 'غلق تسجيل الطلاب' },
+  lookupOpen: { on: 'فتح استرجاع الكارنيه', off: 'غلق استرجاع الكارنيه' }
+};
+
 async function getPublicSettings() {
   const map = await readSettings();
-  return { registrationOpen: !map.registrationOpen || map.registrationOpen.value !== 'لا' };
+  const out = {};
+  Object.keys(SWITCHES).forEach(k => { out[k] = !map[k] || map[k].value !== 'لا'; });
+  return out;
 }
 
-async function setRegistrationOpen(actor, open, ip) {
+async function setSwitch(actor, key, open, ip) {
+  if (!SWITCHES[key]) throw new HttpError(400, 'إعداد غير معروف');
   const map = await readSettings(true);
   const { sheets, spreadsheetId } = await ensureSheets();
-  const values = [['registrationOpen', open ? 'نعم' : 'لا', cairoNow().stamp, actor.email]];
-  if (map.registrationOpen) {
-    await sheets.spreadsheets.values.update({ spreadsheetId, range: `Settings!A${map.registrationOpen.row}:D${map.registrationOpen.row}`, valueInputOption: 'RAW', requestBody: { values } });
+  const values = [[key, open ? 'نعم' : 'لا', cairoNow().stamp, actor.email]];
+  if (map[key]) {
+    await sheets.spreadsheets.values.update({ spreadsheetId, range: `Settings!A${map[key].row}:D${map[key].row}`, valueInputOption: 'RAW', requestBody: { values } });
   } else {
     await sheets.spreadsheets.values.append({ spreadsheetId, range: 'Settings!A:D', valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS', requestBody: { values } });
   }
   settingsCache = { at: 0, map: null };
-  await audit(actor.email, actor.role, open ? 'فتح تسجيل الطلاب' : 'غلق تسجيل الطلاب', '', ip);
-  return { success: true, registrationOpen: !!open, message: open ? 'تم فتح تسجيل الطلاب' : 'تم غلق تسجيل الطلاب' };
+  const label = open ? SWITCHES[key].on : SWITCHES[key].off;
+  await audit(actor.email, actor.role, label, '', ip);
+  return { success: true, key, open: !!open, [key]: !!open, message: `تم ${label}` };
+}
+
+function setRegistrationOpen(actor, open, ip) {
+  return setSwitch(actor, 'registrationOpen', open, ip);
 }
 
 // ==================== الطلاب ====================
@@ -625,6 +639,31 @@ async function registerStudent(payload, ip) {
   }
 
   return { success: true, message: 'تم تسجيل الطالب بنجاح', studentCode: code, qrData: sec.buildQrPayload(code), name, grade, enrollType, status };
+}
+
+// استرجاع الكارنيه: الاسم كاملاً بالضبط + الفرقة (لا بحث جزئي ولا قوائم أسماء)، بحد أقصى للمحاولات وتسجيل في السجل
+async function lookupStudent(payload, ip) {
+  if (payload.website) throw new HttpError(400, 'طلب غير صالح');
+  if (!(await getPublicSettings()).lookupOpen) throw new HttpError(403, 'استرجاع الكارنيه متوقف حالياً. تواصل مع إدارة القسم');
+  const name = cleanText(payload.name, 80);
+  const grade = cleanText(payload.grade);
+  if (!name || name.split(' ').length < 3 || !NAME_RE.test(name)) throw new HttpError(400, 'اكتب اسمك كاملاً (ثلاثي على الأقل) كما سجلته');
+  if (!GRADES.includes(grade)) throw new HttpError(400, 'اختر الفرقة الدراسية');
+
+  const limit = sec.rateLimit(`lookup:${ip}`, 8, 3600);
+  if (!limit.allowed) throw new HttpError(429, `محاولات بحث كثيرة من هذا الجهاز. حاول بعد ${Math.ceil(limit.retryAfter / 60)} دقيقة`);
+
+  const norm = normalizeArabic(name);
+  const matches = (await readStudents(true)).filter(s => s.grade === grade && normalizeArabic(s.name) === norm);
+  if (!matches.length) {
+    await audit('طالب', 'student', 'بحث كارنيه بدون نتيجة', `${name} - ${grade}`, ip);
+    throw new HttpError(404, 'لم يتم العثور على طالب بهذا الاسم في هذه الفرقة. اكتب الاسم بنفس الطريقة التي سجلت بها');
+  }
+  if (matches.length > 1) throw new HttpError(409, 'يوجد أكثر من طالب بنفس الاسم. تواصل مع إدارة القسم لاستلام الكارنيه');
+  const s = matches[0];
+  if (!s.active) throw new HttpError(403, 'حسابك موقوف. تواصل مع إدارة القسم');
+  await audit('طالب', 'student', 'استرجاع كارنيه', `${s.code} ${s.name}`, ip);
+  return { success: true, studentCode: s.code, qrData: sec.buildQrPayload(s.code), name: s.name, grade: s.grade, enrollType: s.enrollType, status: s.status };
 }
 
 async function updateStudent(actor, code, updated, ip) {
@@ -1300,10 +1339,12 @@ module.exports = {
   setAdminActive,
   getPublicSettings,
   setRegistrationOpen,
+  setSwitch,
   resetAdminPassword,
   readStudents,
   studentPublic,
   registerStudent,
+  lookupStudent,
   updateStudent,
   getStudentCard,
   promoteStudents,

@@ -1,12 +1,12 @@
 const { route, HttpError } = require('./_lib/http');
-const { registerStudent, readStudents, studentPublic, updateStudent, getStudentCard, deleteStudents } = require('./_sheets');
+const { registerStudent, lookupStudent, readStudents, studentPublic, updateStudent, getStudentCard, deleteStudents } = require('./_sheets');
 
-// POST: تسجيل طالب (عام ومحمي بحدود) | GET و PUT و DELETE: للسوبر أدمن فقط
+// POST: تسجيل طالب أو استرجاع كارنيه (عام ومحمي بحدود) | GET و PUT و DELETE: للسوبر أدمن فقط
 module.exports = route({
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   roles: req => (req.method === 'POST' ? null : ['super_admin'])
 }, async ({ req, user, body, query, ip }) => {
-  if (req.method === 'POST') return registerStudent(body, ip);
+  if (req.method === 'POST') return body.action === 'lookup' ? lookupStudent(body, ip) : registerStudent(body, ip);
 
   if (req.method === 'GET') {
     if (query.card) return getStudentCard(query.card);

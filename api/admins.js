@@ -1,5 +1,5 @@
 const { route, HttpError } = require('./_lib/http');
-const { listAdminsSafe, saveAdmin, setAdminActive, resetAdminPassword, readAudit, getPublicSettings, setRegistrationOpen } = require('./_sheets');
+const { listAdminsSafe, saveAdmin, setAdminActive, resetAdminPassword, readAudit, getPublicSettings, setRegistrationOpen, setSwitch } = require('./_sheets');
 
 // إدارة الحسابات وسجل العمليات والإعدادات: للمشرفين العامين (حسابات المشرفين العامين للمالك فقط)
 module.exports = route({ methods: ['GET', 'POST'], roles: ['super_admin'] }, async ({ req, user, body, query, ip }) => {
@@ -15,6 +15,7 @@ module.exports = route({ methods: ['GET', 'POST'], roles: ['super_admin'] }, asy
     case 'enable': return setAdminActive(user, body.email, true, ip);
     case 'resetPassword': return resetAdminPassword(user, body.email, ip);
     case 'setRegistration': return setRegistrationOpen(user, body.open === true, ip);
+    case 'setSetting': return setSwitch(user, String(body.key || ''), body.open === true, ip);
     default: throw new HttpError(400, 'إجراء غير معروف');
   }
 });

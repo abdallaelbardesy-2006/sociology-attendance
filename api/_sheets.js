@@ -878,9 +878,8 @@ async function finishLecture(user, code, no, ip) {
   return { success: true, count: l.count, message: `تم إنهاء المحاضرة رقم ${l.no} (${l.count} حاضر)` };
 }
 
-// إعادة فتح آخر محاضرة منتهية (لو اتقفلت بالغلط):
-// - أي حساب مصرح له بالمادة (ليدر/دكتور) لكن فقط لمحاضرة اليوم ولم تبدأ التالية
-// - المشرف العام يمكنه إعادة فتح آخر محاضرة منتهية في أي يوم
+// إعادة فتح آخر محاضرة منتهية (لو اتقفلت بالغلط أو فيه طلاب لسه عايزين يسجلوا):
+// أي حساب مصرح له بالمادة (مشرف/دكتور/ليدر)، بشرط أنها آخر محاضرة منتهية ولم تبدأ التالية
 async function reopenLecture(user, code, no, ip) {
   const subject = requireScanSubject(user, code);
   const state = buildLectures(subject, await readLectureRows());
@@ -890,13 +889,11 @@ async function reopenLecture(user, code, no, ip) {
   if (!l || l.status !== LECTURE_STATUS.done) throw new HttpError(400, 'يمكن إعادة فتح محاضرة منتهية فقط');
   if (state.current !== null && state.current !== l.no + 1) throw new HttpError(400, 'يمكن إعادة فتح آخر محاضرة منتهية فقط');
   if (next && next.status !== LECTURE_STATUS.locked) throw new HttpError(400, 'لا يمكن إعادة فتحها بعد بدء المحاضرة التالية');
-  if (user.role !== 'super_admin' && l.startDate !== today) {
-    throw new HttpError(403, 'يمكن إعادة فتح محاضرة اليوم فقط. للمحاضرات القديمة تواصل مع المشرف العام');
-  }
   const prevEndedBy = l.endedBy;
+  const originalDate = l.startDate;
   Object.assign(l, { status: LECTURE_STATUS.open, startDate: today, endDate: '', endTime: '', endedBy: '' });
   await writeLecture(subject, l);
-  await audit(user.email, user.role, 'إعادة فتح محاضرة', `${subject.code} - المحاضرة ${l.no}${prevEndedBy ? ` (كان أنهاها ${prevEndedBy})` : ''}`, ip);
+  await audit(user.email, user.role, 'إعادة فتح محاضرة', `${subject.code} - المحاضرة ${l.no}${originalDate && originalDate !== today ? ` (كانت يوم ${originalDate})` : ''}${prevEndedBy ? ` (كان أنهاها ${prevEndedBy})` : ''}`, ip);
   return { success: true, message: `تمت إعادة فتح المحاضرة رقم ${l.no}` };
 }
 

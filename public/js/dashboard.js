@@ -625,9 +625,9 @@
       const tip = l.state === 'done' ? `بدأت ${l.startDate} ${l.startTime || ''} • انتهت ${l.endDate} ${l.endTime || ''} • ${l.endedBy || ''}` : l.state === 'open' ? `فتحها ${l.startedBy} الساعة ${l.startTime}` : '';
       return `<div class="lec-tile ${cls}" title="${esc(tip)}"><i class="fas ${icon}"></i><div class="lec-no">${l.no}</div><div class="lec-sub">${sub}</div></div>`;
     };
-    // إعادة فتح آخر محاضرة منتهية: لأي ليدر/دكتور لو كانت اليوم، والمشرف العام في أي وقت
+    // إعادة فتح آخر محاضرة منتهية: لأي ليدر/دكتور/مشرف ما دامت المحاضرة التالية لم تبدأ
     const lastDone = L.lectures.filter(l => l.state === 'done').pop();
-    const canReopen = !!lastDone && !L.openToday && !L.staleOpen && (isSuper || lastDone.startDate === L.today);
+    const canReopen = !!lastDone && !L.openToday && !L.staleOpen;
     const reopenBtn = canReopen ? `<button class="btn btn-outline-primary fw-800" data-lec="reopen" data-no="${lastDone.no}"><i class="fas fa-rotate-left me-1"></i> إعادة فتح المحاضرة رقم ${lastDone.no}</button>` : '';
     let action = '';
     if (L.completed) {
@@ -646,7 +646,7 @@
           <div class="small">تم إنهاء المحاضرة رقم ${L.current - 1} اليوم${lastDone && lastDone.endedBy ? ` بواسطة ${esc(lastDone.endedBy)}` : ''}. ${canReopen ? 'لو اتقفلت بالغلط وفيه طلاب لسه عايزين يسجلوا، أعد فتحها.' : ''}</div></div>
         <div class="d-flex gap-2 flex-wrap">${reopenBtn}${isSuper ? `<button class="btn btn-outline-secondary btn-sm" data-lec="force"><i class="fas fa-key me-1"></i> فتح المحاضرة ${L.current} استثنائياً</button>` : ''}</div></div>`;
     } else {
-      action = `<div class="lec-action ready"><div><div class="fw-900">جاهز لبدء المحاضرة رقم ${L.current}</div><div class="small">بعد البدء تعمل الكاميرا ويتم تسجيل الحضور على المحاضرة رقم ${L.current}.</div></div>
+      action = `<div class="lec-action ready"><div><div class="fw-900">جاهز لبدء المحاضرة رقم ${L.current}</div><div class="small">بعد البدء تعمل الكاميرا ويتم تسجيل الحضور على المحاضرة رقم ${L.current}.${canReopen ? ` لو فيه طلاب لسه عايزين يسجلوا في المحاضرة رقم ${lastDone.no} أعد فتحها أولاً.` : ''}</div></div>
         <div class="d-flex gap-2 flex-wrap">${reopenBtn}<button class="btn btn-brand fw-800 px-4" data-lec="start"><i class="fas fa-play me-1"></i> بدء المحاضرة رقم ${L.current}</button></div></div>`;
     }
     document.getElementById('lecCard').innerHTML = `

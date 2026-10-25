@@ -878,17 +878,25 @@ async function finishLecture(user, code, no, ip) {
   return { success: true, count: l.count, message: `تم إنهاء المحاضرة رقم ${l.no} (${l.count} حاضر)` };
 }
 
+// إعادة فتح آخر محاضرة منتهية (لو اتقفلت بالغلط):
+// - أي حساب مصرح له بالمادة (ليدر/دكتور) لكن فقط لمحاضرة اليوم ولم تبدأ التالية
+// - المشرف العام يمكنه إعادة فتح آخر محاضرة منتهية في أي يوم
 async function reopenLecture(user, code, no, ip) {
-  if (user.role !== 'super_admin') throw new HttpError(403, 'إعادة فتح المحاضرات للمشرف العام فقط');
   const subject = requireScanSubject(user, code);
   const state = buildLectures(subject, await readLectureRows());
   const l = state._list[Number(no) - 1];
   const next = state._list[Number(no)];
+  const today = cairoNow().date;
   if (!l || l.status !== LECTURE_STATUS.done) throw new HttpError(400, 'يمكن إعادة فتح محاضرة منتهية فقط');
+  if (state.current !== null && state.current !== l.no + 1) throw new HttpError(400, 'يمكن إعادة فتح آخر محاضرة منتهية فقط');
   if (next && next.status !== LECTURE_STATUS.locked) throw new HttpError(400, 'لا يمكن إعادة فتحها بعد بدء المحاضرة التالية');
-  Object.assign(l, { status: LECTURE_STATUS.open, startDate: cairoNow().date, endDate: '', endTime: '', endedBy: '' });
+  if (user.role !== 'super_admin' && l.startDate !== today) {
+    throw new HttpError(403, 'يمكن إعادة فتح محاضرة اليوم فقط. للمحاضرات القديمة تواصل مع المشرف العام');
+  }
+  const prevEndedBy = l.endedBy;
+  Object.assign(l, { status: LECTURE_STATUS.open, startDate: today, endDate: '', endTime: '', endedBy: '' });
   await writeLecture(subject, l);
-  await audit(user.email, user.role, 'إعادة فتح محاضرة', `${subject.code} - المحاضرة ${l.no}`, ip);
+  await audit(user.email, user.role, 'إعادة فتح محاضرة', `${subject.code} - المحاضرة ${l.no}${prevEndedBy ? ` (كان أنهاها ${prevEndedBy})` : ''}`, ip);
   return { success: true, message: `تمت إعادة فتح المحاضرة رقم ${l.no}` };
 }
 

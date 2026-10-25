@@ -464,7 +464,7 @@
   }
 
   // ==================== 2. ماسح الحضور ====================
-  const sc = { subject: null, cam: null, running: false, busy: false, last: '', lastAt: 0, count: 0, log: [], grade: '', term: '', q: '', lec: null };
+  const sc = { subject: null, cam: null, running: false, busy: false, last: '', lastAt: 0, count: 0, log: [], grade: '', term: '', q: '', lec: null, wantCam: false, paused: false, restarting: false, camError: false };
 
   function allowedScanSubjects() {
     if (ME.role === 'doctor') return (ME.subjects || []).map(s => SUBJECTS.find(x => x.code === s.code) || s);
@@ -563,22 +563,37 @@
   }
 
   // ===== المحاضرات 1 → 15: لا مسح إلا داخل محاضرة مفتوحة اليوم =====
-  async function refreshLectures() {
+  // عدة ليدرز ممكن يمسحوا نفس المادة في نفس الوقت: الحالة تتزامن كل 15 ثانية من السيرفر
+  async function refreshLectures(opts = {}) {
     if (!sc.subject) return;
     const card = document.getElementById('lecCard');
+    const prev = sc.lec;
+    let next;
     try {
-      sc.lec = await api('/api/lectures?subject=' + encodeURIComponent(sc.subject.code));
+      next = await api('/api/lectures?subject=' + encodeURIComponent(sc.subject.code));
     } catch (e) {
-      card.innerHTML = errorHtml(e.message);
+      if (!opts.silent) card.innerHTML = errorHtml(e.message);
       return;
     }
-    if (currentSection !== 'scanner') return;
+    if (currentSection !== 'scanner' || !sc.subject || next.subject.code !== sc.subject.code) return;
+    sc.lec = next;
+
+    // تنبيه لو ليدر تاني أنهى أو فتح المحاضرة من جهاز آخر
+    if (opts.silent && prev && prev.subject.code === next.subject.code) {
+      if (prev.openToday && !next.openToday) {
+        const ended = next.lectures[prev.current - 1];
+        say('info', `تم إنهاء المحاضرة رقم ${prev.current}`, ended && ended.endedBy ? `أنهاها ${ended.endedBy}${ended.endTime ? ' الساعة ' + ended.endTime : ''}` : 'تم إنهاؤها من جهاز آخر');
+      } else if (!prev.openToday && next.openToday) {
+        toast('info', `تم فتح المحاضرة رقم ${next.current}`);
+      }
+    }
+
     drawLectures();
     const cam = document.getElementById('camArea');
     if (sc.lec.openToday) {
       cam.style.display = '';
       document.getElementById('camTitle').textContent = `${sc.subject.name} — المحاضرة رقم ${sc.lec.current}`;
-      if (!sc.running) {
+      if (!sc.wantCam) {
         setResult('idle', '<i class="fas fa-qrcode fa-2x mb-2"></i><div>وجّه الكاميرا نحو كارنيه الطالب</div>');
         await startCamera();
       }
@@ -587,6 +602,13 @@
       cam.style.display = 'none';
     }
   }
+
+  setInterval(() => {
+    const dialogOpen = Swal.isVisible() && !Swal.getPopup().classList.contains('swal2-toast');
+    if (currentSection === 'scanner' && sc.subject && sc.lec && !sc.busy && document.visibilityState === 'visible' && !dialogOpen) {
+      refreshLectures({ silent: true });
+    }
+  }, 15000);
 
   function drawLectures() {
     const L = sc.lec;
@@ -603,24 +625,29 @@
       const tip = l.state === 'done' ? `بدأت ${l.startDate} ${l.startTime || ''} • انتهت ${l.endDate} ${l.endTime || ''} • ${l.endedBy || ''}` : l.state === 'open' ? `فتحها ${l.startedBy} الساعة ${l.startTime}` : '';
       return `<div class="lec-tile ${cls}" title="${esc(tip)}"><i class="fas ${icon}"></i><div class="lec-no">${l.no}</div><div class="lec-sub">${sub}</div></div>`;
     };
+    // إعادة فتح آخر محاضرة منتهية: لأي ليدر/دكتور لو كانت اليوم، والمشرف العام في أي وقت
     const lastDone = L.lectures.filter(l => l.state === 'done').pop();
-    const canReopen = isSuper && lastDone && !L.openToday && !L.staleOpen;
+    const canReopen = !!lastDone && !L.openToday && !L.staleOpen && (isSuper || lastDone.startDate === L.today);
+    const reopenBtn = canReopen ? `<button class="btn btn-outline-primary fw-800" data-lec="reopen" data-no="${lastDone.no}"><i class="fas fa-rotate-left me-1"></i> إعادة فتح المحاضرة رقم ${lastDone.no}</button>` : '';
     let action = '';
     if (L.completed) {
-      action = `<div class="alert alert-success mb-0"><i class="fas fa-flag-checkered me-1"></i> تم إنهاء المحاضرات الـ 15 لهذه المادة.</div>`;
+      action = `<div class="lec-action info"><div><div class="fw-900"><i class="fas fa-flag-checkered me-1"></i> تم إنهاء المحاضرات الـ 15 لهذه المادة</div>${canReopen ? '<div class="small">لو المحاضرة الأخيرة اتقفلت بالغلط يمكنك إعادة فتحها.</div>' : ''}</div>${reopenBtn}</div>`;
     } else if (L.openToday) {
-      action = `<div class="lec-action open"><div><div class="fw-900">المحاضرة رقم ${L.current} مفتوحة الآن</div><div class="small">امسح كروت الطلاب، وعند انتهاء المحاضرة اضغط "تم إنهاء المحاضرة".</div></div>
+      const cur = L.lectures[L.current - 1];
+      action = `<div class="lec-action open"><div><div class="fw-900">المحاضرة رقم ${L.current} مفتوحة الآن</div>
+          <div class="small">فتحها ${esc(cur.startedBy || '')}${cur.startTime ? ' الساعة ' + esc(cur.startTime) : ''} • أي ليدر مصرح له يقدر يمسح فيها من جهازه.</div></div>
         <button class="btn btn-danger fw-800" data-lec="finish"><i class="fas fa-flag-checkered me-1"></i> تم إنهاء المحاضرة رقم ${L.current} اليوم</button></div>`;
     } else if (L.staleOpen) {
       const cur = L.lectures[L.current - 1];
       action = `<div class="lec-action warn"><div><div class="fw-900">المحاضرة رقم ${L.current} مفتوحة منذ ${esc(cur.startDate)} ولم يتم إنهاؤها</div><div class="small">أنهها أولاً، ثم تُفتح المحاضرة التالية.</div></div>
         <button class="btn btn-warning fw-800" data-lec="finish"><i class="fas fa-flag-checkered me-1"></i> إنهاء المحاضرة رقم ${L.current}</button></div>`;
     } else if (L.nextBlockedToday) {
-      action = `<div class="lec-action info"><div><div class="fw-900"><i class="fas fa-lock me-1"></i> المحاضرة رقم ${L.current} تُفتح في المرة القادمة</div><div class="small">تم إنهاء المحاضرة رقم ${L.current - 1} اليوم. افتح المحاضرة رقم ${L.current} عندما يحين موعدها.</div></div>
-        ${isSuper ? `<button class="btn btn-outline-secondary btn-sm" data-lec="force"><i class="fas fa-key me-1"></i> فتح استثنائي اليوم</button>` : ''}</div>`;
+      action = `<div class="lec-action info"><div><div class="fw-900"><i class="fas fa-lock me-1"></i> المحاضرة رقم ${L.current} تُفتح في المرة القادمة</div>
+          <div class="small">تم إنهاء المحاضرة رقم ${L.current - 1} اليوم${lastDone && lastDone.endedBy ? ` بواسطة ${esc(lastDone.endedBy)}` : ''}. ${canReopen ? 'لو اتقفلت بالغلط وفيه طلاب لسه عايزين يسجلوا، أعد فتحها.' : ''}</div></div>
+        <div class="d-flex gap-2 flex-wrap">${reopenBtn}${isSuper ? `<button class="btn btn-outline-secondary btn-sm" data-lec="force"><i class="fas fa-key me-1"></i> فتح المحاضرة ${L.current} استثنائياً</button>` : ''}</div></div>`;
     } else {
       action = `<div class="lec-action ready"><div><div class="fw-900">جاهز لبدء المحاضرة رقم ${L.current}</div><div class="small">بعد البدء تعمل الكاميرا ويتم تسجيل الحضور على المحاضرة رقم ${L.current}.</div></div>
-        <button class="btn btn-brand fw-800 px-4" data-lec="start"><i class="fas fa-play me-1"></i> بدء المحاضرة رقم ${L.current}</button></div>`;
+        <div class="d-flex gap-2 flex-wrap">${reopenBtn}<button class="btn btn-brand fw-800 px-4" data-lec="start"><i class="fas fa-play me-1"></i> بدء المحاضرة رقم ${L.current}</button></div></div>`;
     }
     document.getElementById('lecCard').innerHTML = `
       <div class="card-head">
@@ -630,8 +657,7 @@
       </div>
       <div class="rate-bar mb-3" style="height:6px"><span style="width:${Math.round(done / 15 * 100)}%;background:var(--ok)"></span></div>
       <div class="lec-grid mb-3">${L.lectures.map(tile).join('')}</div>
-      ${action}
-      ${canReopen ? `<div class="text-start mt-2"><button class="btn btn-link btn-sm text-muted-2 p-0" data-lec="reopen" data-no="${lastDone.no}"><i class="fas fa-rotate-left me-1"></i> إعادة فتح المحاضرة رقم ${lastDone.no} (للمشرف العام)</button></div>` : ''}`;
+      ${action}`;
   }
 
   async function onLectureAction(e) {
@@ -649,13 +675,13 @@
       body = { action: 'start', subjectCode: code, lectureNo: no, force: true };
     }
     if (act === 'finish') {
-      const c = await Swal.fire({ icon: 'question', title: `إنهاء المحاضرة رقم ${no}؟`, html: `لن يمكن تسجيل حضور في هذه المحاضرة بعد إنهائها،<br>والمحاضرة رقم ${no + 1 <= 15 ? no + 1 : '—'} تُفتح في المرة القادمة.`, showCancelButton: true, confirmButtonText: 'نعم، تم إنهاء المحاضرة', cancelButtonText: 'إلغاء' });
+      const c = await Swal.fire({ icon: 'question', title: `إنهاء المحاضرة رقم ${no}؟`, html: `سيتوقف المسح في هذه المحاضرة <b>عند كل الليدرز وعلى كل الأجهزة</b>.<br>تأكد أن كل الطلاب سجلوا حضورهم.<br><small class="text-muted">لو أنهيتها بالغلط يمكن إعادة فتحها اليوم.</small>`, showCancelButton: true, confirmButtonText: 'نعم، تم إنهاء المحاضرة', cancelButtonText: 'إلغاء', focusCancel: true });
       if (!c.isConfirmed) return;
       body = { action: 'finish', subjectCode: code, lectureNo: no };
     }
     if (act === 'reopen') {
       const rn = parseInt(b.dataset.no, 10);
-      const c = await Swal.fire({ icon: 'warning', title: `إعادة فتح المحاضرة رقم ${rn}؟`, text: 'لتصحيح إنهاء بالخطأ. يمكن بعدها استكمال المسح ثم إنهاؤها مرة أخرى.', showCancelButton: true, confirmButtonText: 'إعادة فتح', cancelButtonText: 'إلغاء' });
+      const c = await Swal.fire({ icon: 'warning', title: `إعادة فتح المحاضرة رقم ${rn}؟`, text: 'للطلاب الذين لم يسجلوا بعد. الحضور المسجل قبل كده محفوظ، وبعد الانتهاء اضغط "تم إنهاء المحاضرة" مرة أخرى. العملية مسجلة باسمك.', showCancelButton: true, confirmButtonText: 'إعادة فتح', cancelButtonText: 'إلغاء' });
       if (!c.isConfirmed) return;
       body = { action: 'reopen', subjectCode: code, lectureNo: rn };
     }
@@ -674,11 +700,32 @@
     await refreshLectures();
   }
 
+  // ===== الكاميرا: تفضل شغالة طول ما المحاضرة مفتوحة =====
+  // - الشاشة لا تنطفئ (Wake Lock)
+  // - مراقبة كل 4 ثواني: لو الفيديو وقف/اسودّ/علّق تُعاد تشغيله تلقائياً
+  // - عند الرجوع للتطبيق بعد قفل الشاشة تُعاد تشغيله
+  let wakeLock = null;
+  async function keepScreenOn() {
+    try {
+      if ('wakeLock' in navigator && document.visibilityState === 'visible' && !wakeLock) {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => { wakeLock = null; });
+      }
+    } catch (e) { wakeLock = null; }
+  }
+  function releaseScreen() {
+    try { if (wakeLock) wakeLock.release(); } catch (e) { /* ignore */ }
+    wakeLock = null;
+  }
+
   async function startCamera() {
     if (!window.Html5Qrcode) return setResult('bad', 'تعذر تحميل مكتبة الكاميرا. تحقق من الإنترنت');
-    await stopCamera();
-    sc.cam = new Html5Qrcode('reader', { verbose: false });
-    const config = { fps: 10, qrbox: (w, h) => { const m = Math.floor(Math.min(w, h) * 0.7); return { width: m, height: m }; }, aspectRatio: 1 };
+    sc.wantCam = true;
+    sc.camError = false;
+    await stopCamera({ restart: true });
+    sc.cam = new Html5Qrcode('reader', { verbose: false, experimentalFeatures: { useBarCodeDetectorIfSupported: true } });
+    const qrbox = (w, h) => { const m = Math.floor(Math.min(w, h) * 0.7); return { width: m, height: m }; };
+    const config = { fps: 10, qrbox, aspectRatio: 1, videoConstraints: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } };
     try {
       await sc.cam.start({ facingMode: 'environment' }, config, onScan, () => {});
       sc.running = true;
@@ -686,17 +733,27 @@
       try {
         const cams = await Html5Qrcode.getCameras();
         if (!cams.length) throw e;
-        await sc.cam.start(cams[cams.length - 1].id, config, onScan, () => {});
+        await sc.cam.start(cams[cams.length - 1].id, { fps: 10, qrbox, aspectRatio: 1 }, onScan, () => {});
         sc.running = true;
       } catch (e2) {
+        sc.running = false;
+        sc.camError = true;
         setResult('bad', `<div class="fw-800">تعذر تشغيل الكاميرا</div><div class="small">اسمح للمتصفح باستخدام الكاميرا ثم أعد المحاولة. (${esc(e2.message || e2)})</div><button class="btn btn-sm btn-brand mt-2" id="btnRetryCam"><i class="fas fa-camera me-1"></i> إعادة المحاولة</button>`);
         const retry = document.getElementById('btnRetryCam');
         if (retry) retry.addEventListener('click', startCamera);
+        return;
       }
     }
+    sc.lastVideoTime = -1;
+    sc.stuckChecks = 0;
+    keepScreenOn();
   }
 
-  async function stopCamera() {
+  async function stopCamera(opts = {}) {
+    if (!opts.restart) {
+      sc.wantCam = false;
+      releaseScreen();
+    }
     if (sc.cam) {
       try { if (sc.running) await sc.cam.stop(); } catch (e) { /* ignore */ }
       try { sc.cam.clear(); } catch (e) { /* ignore */ }
@@ -705,6 +762,39 @@
     sc.running = false;
   }
 
+  async function restartCamera(reason) {
+    if (sc.restarting) return;
+    sc.restarting = true;
+    console.warn('camera restart:', reason);
+    try { await startCamera(); } finally { sc.restarting = false; }
+  }
+
+  function cameraHealthy() {
+    const video = document.querySelector('#reader video');
+    if (!video) return false;
+    const track = video.srcObject && video.srcObject.getVideoTracks ? video.srcObject.getVideoTracks()[0] : null;
+    if (!track || track.readyState === 'ended' || track.muted) return false;
+    if (video.paused || video.readyState < 2) return false;
+    if (video.currentTime === sc.lastVideoTime) {
+      sc.stuckChecks = (sc.stuckChecks || 0) + 1;
+      if (sc.stuckChecks >= 2) return false;
+    } else sc.stuckChecks = 0;
+    sc.lastVideoTime = video.currentTime;
+    return true;
+  }
+
+  setInterval(() => {
+    if (!sc.wantCam || sc.camError || sc.restarting || sc.paused || currentSection !== 'scanner' || document.visibilityState !== 'visible') return;
+    if (!sc.running || !cameraHealthy()) restartCamera('watchdog');
+  }, 4000);
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || !sc.wantCam || currentSection !== 'scanner') return;
+    keepScreenOn();
+    setTimeout(() => { if (sc.wantCam && !sc.camError && !sc.paused && !cameraHealthy()) restartCamera('resume'); }, 800);
+    if (sc.subject) refreshLectures({ silent: true });
+  });
+
   function setResult(kind, html) {
     const el = document.getElementById('scanResult');
     if (!el) return;
@@ -712,9 +802,13 @@
     el.innerHTML = html;
   }
 
+  // صوت واحد مشترك: إنشاء AudioContext جديد مع كل مسح كان يسبب تعليق الصفحة وشاشة سوداء بعد عدة مسحات
+  let audioCtx = null;
   function feedback(ok) {
     try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      const ctx = audioCtx;
       const play = (freq, at, dur) => {
         const o = ctx.createOscillator();
         const g = ctx.createGain();
@@ -723,9 +817,10 @@
         g.gain.setValueAtTime(0.25, ctx.currentTime + at);
         o.start(ctx.currentTime + at);
         o.stop(ctx.currentTime + at + dur);
+        o.onended = () => { try { o.disconnect(); g.disconnect(); } catch (e) { /* ignore */ } };
       };
       if (ok) { play(880, 0, 0.12); play(1320, 0.13, 0.15); } else { play(300, 0, 0.35); }
-      if (navigator.vibrate) navigator.vibrate(ok ? 80 : [200, 80, 200]);
+      if (navigator.vibrate && navigator.userActivation && navigator.userActivation.hasBeenActive) navigator.vibrate(ok ? 80 : [200, 80, 200]);
     } catch (e) { /* ignore */ }
   }
 
@@ -740,10 +835,12 @@
     try {
       let res = await api('/api/attendance', { method: 'POST', body: { qrData: text, subjectCode: sc.subject.code } });
       if (res.type === 'confirm_grade') {
+        sc.paused = true;
         try { sc.cam && sc.cam.pause(true); } catch (e) { /* ignore */ }
         feedback(false);
         const c = await Swal.fire({ icon: 'warning', title: 'طالب من فرقة أخرى', text: res.message, showCancelButton: true, confirmButtonText: 'نعم، سجّله', cancelButtonText: 'لا' });
         try { sc.cam && sc.cam.resume(); } catch (e) { /* ignore */ }
+        sc.paused = false;
         if (!c.isConfirmed) {
           setResult('warn', `<div class="who">${esc(res.studentName)}</div><div>لم يتم التسجيل</div>`);
           addLog(res.studentName, res.studentCode, 'تم الإلغاء (فرقة أخرى)', 'warn');

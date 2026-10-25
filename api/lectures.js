@@ -1,7 +1,7 @@
 const { route, HttpError } = require('./_lib/http');
 const { getLectures, startLecture, finishLecture, reopenLecture } = require('./_sheets');
 
-// المحاضرات 1 → 15 لكل مادة: لأي حساب مصرح له بالمسح في المادة (إعادة الفتح للمشرف العام فقط)
+// المحاضرات 1 → 15 لكل مادة: لأي حساب مصرح له بالمسح في المادة (إعادة فتح محاضرة اليوم متاحة للجميع، والأقدم للمشرف العام)
 module.exports = route({ methods: ['GET', 'POST'], roles: ['super_admin', 'doctor', 'leader'] }, async ({ req, user, body, query, ip }) => {
   if (req.method === 'GET') return getLectures(user, query.subject);
 

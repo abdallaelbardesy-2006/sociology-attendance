@@ -68,6 +68,20 @@ function createMockSheets(seed = {}) {
       async batchUpdate({ requestBody }) {
         for (const req of requestBody.requests) {
           if (req.addSheet) addTab(req.addSheet.properties.title);
+          if (req.appendCells) {
+            const { sheetId, rows } = req.appendCells;
+            for (const [title, m] of meta) {
+              if (m.sheetId !== sheetId) continue;
+              const grid = tabs.get(title);
+              const start = lastRow(grid) + 1;
+              rows.forEach((r, i) => {
+                grid[start + i] = r.values.map(c => {
+                  const v = c.userEnteredValue || {};
+                  return v.numberValue !== undefined ? String(v.numberValue) : (v.stringValue || '');
+                });
+              });
+            }
+          }
           if (req.deleteDimension) {
             const { sheetId, startIndex, endIndex } = req.deleteDimension.range;
             for (const [title, m] of meta) if (m.sheetId === sheetId) tabs.get(title).splice(startIndex, endIndex - startIndex);

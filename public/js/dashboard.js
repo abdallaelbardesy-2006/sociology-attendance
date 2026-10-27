@@ -499,6 +499,7 @@
           <div class="card-x">
             <div class="card-head">
               <h3 class="card-title"><i class="fas fa-camera"></i> <span id="camTitle"></span></h3>
+              <div class="d-flex gap-1"><button class="btn btn-sm btn-soft" data-cam="flip" title="تبديل الكاميرا الأمامية/الخلفية"><i class="fas fa-camera-rotate"></i></button><button class="btn btn-sm btn-soft" data-cam="restart" title="إعادة تشغيل الكاميرا"><i class="fas fa-rotate"></i> إعادة تشغيل</button></div>
             </div>
             <div id="reader"></div>
             <div class="scan-result idle" id="scanResult"><i class="fas fa-qrcode fa-2x mb-2"></i><div>وجّه الكاميرا نحو كارنيه الطالب</div></div>
@@ -608,7 +609,7 @@
     if (currentSection === 'scanner' && sc.subject && sc.lec && !sc.busy && document.visibilityState === 'visible' && !dialogOpen) {
       refreshLectures({ silent: true });
     }
-  }, 15000);
+  }, 20000);
 
   function drawLectures() {
     const L = sc.lec;
@@ -700,10 +701,14 @@
     await refreshLectures();
   }
 
-  // ===== الكاميرا: تفضل شغالة طول ما المحاضرة مفتوحة =====
-  // - الشاشة لا تنطفئ (Wake Lock)
-  // - مراقبة كل 4 ثواني: لو الفيديو وقف/اسودّ/علّق تُعاد تشغيله تلقائياً
-  // - عند الرجوع للتطبيق بعد قفل الشاشة تُعاد تشغيله
+  // ===== الكاميرا: ماسح خفيف مكتوب خصيصاً (بدون html5-qrcode) =====
+  // - كاميرا واحدة فقط في أي وقت (رقم جيل لكل تشغيل يمنع تشغيلين متداخلين = شاشة سودا)
+  // - قراءة QR بقارئ الهاتف المدمج (BarcodeDetector) أو jsQR على جزء صغير من الصورة ~7 مرات/ثانية
+  // - عند الخروج من التطبيق أو قفل الشاشة تُغلق الكاميرا، وعند الرجوع تُفتح من جديد
+  // - مراقبة كل 3 ثواني: لو الصورة وقفت أو اسودّت تُعاد تشغيل الكاميرا تلقائياً
+  // - الشاشة لا تنطفئ أثناء المسح (Wake Lock)
+  const cam = { gen: 0, stream: null, video: null, canvas: null, ctx: null, detector: undefined, timer: null, facing: 'environment', lastTime: -1, stuck: 0, restarts: [] };
+
   let wakeLock = null;
   async function keepScreenOn() {
     try {
@@ -718,81 +723,188 @@
     wakeLock = null;
   }
 
+  function releaseStream() {
+    clearTimeout(cam.timer);
+    cam.timer = null;
+    if (cam.stream) cam.stream.getTracks().forEach(t => { try { t.stop(); } catch (e) { /* ignore */ } });
+    if (cam.video) { try { cam.video.pause(); cam.video.srcObject = null; } catch (e) { /* ignore */ } }
+    cam.stream = null;
+    cam.video = null;
+    sc.running = false;
+  }
+
+  function showCamError(msg) {
+    sc.camError = true;
+    const reader = document.getElementById('reader');
+    if (reader) reader.innerHTML = '<div class="cam-off"><i class="fas fa-video-slash fa-2x mb-2"></i><div>الكاميرا متوقفة</div></div>';
+    setResult('bad', `<div class="fw-800">تعذر تشغيل الكاميرا</div><div class="small">${esc(msg)}</div><button class="btn btn-sm btn-brand mt-2" data-cam="restart"><i class="fas fa-camera me-1"></i> إعادة المحاولة</button>`);
+  }
+
+  async function getDetector() {
+    if (cam.detector !== undefined) return cam.detector;
+    cam.detector = null;
+    try {
+      if ('BarcodeDetector' in window) {
+        const formats = await window.BarcodeDetector.getSupportedFormats();
+        if (formats.includes('qr_code')) cam.detector = new window.BarcodeDetector({ formats: ['qr_code'] });
+      }
+    } catch (e) { cam.detector = null; }
+    return cam.detector;
+  }
+
   async function startCamera() {
-    if (!window.Html5Qrcode) return setResult('bad', 'تعذر تحميل مكتبة الكاميرا. تحقق من الإنترنت');
     sc.wantCam = true;
     sc.camError = false;
-    await stopCamera({ restart: true });
-    sc.cam = new Html5Qrcode('reader', { verbose: false, experimentalFeatures: { useBarCodeDetectorIfSupported: true } });
-    const qrbox = (w, h) => { const m = Math.floor(Math.min(w, h) * 0.7); return { width: m, height: m }; };
-    const config = { fps: 10, qrbox, aspectRatio: 1, videoConstraints: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } };
-    try {
-      await sc.cam.start({ facingMode: 'environment' }, config, onScan, () => {});
-      sc.running = true;
-    } catch (e) {
-      try {
-        const cams = await Html5Qrcode.getCameras();
-        if (!cams.length) throw e;
-        await sc.cam.start(cams[cams.length - 1].id, { fps: 10, qrbox, aspectRatio: 1 }, onScan, () => {});
-        sc.running = true;
-      } catch (e2) {
-        sc.running = false;
-        sc.camError = true;
-        setResult('bad', `<div class="fw-800">تعذر تشغيل الكاميرا</div><div class="small">اسمح للمتصفح باستخدام الكاميرا ثم أعد المحاولة. (${esc(e2.message || e2)})</div><button class="btn btn-sm btn-brand mt-2" id="btnRetryCam"><i class="fas fa-camera me-1"></i> إعادة المحاولة</button>`);
-        const retry = document.getElementById('btnRetryCam');
-        if (retry) retry.addEventListener('click', startCamera);
-        return;
+    const gen = ++cam.gen;
+    releaseStream();
+    const reader = document.getElementById('reader');
+    if (!reader) return;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      return showCamError('المتصفح لا يدعم الكاميرا. افتح الموقع من Chrome أو Safari مباشرة (وليس من داخل فيسبوك/واتساب).');
+    }
+    reader.innerHTML = '<div class="cam-off"><span class="spin me-2"></span> جاري تشغيل الكاميرا...</div>';
+
+    let stream = null;
+    const tries = [
+      { video: { facingMode: { ideal: cam.facing }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 24, max: 30 } }, audio: false },
+      { video: { facingMode: cam.facing }, audio: false },
+      { video: true, audio: false }
+    ];
+    let lastErr = null;
+    for (const c of tries) {
+      try { stream = await navigator.mediaDevices.getUserMedia(c); break; } catch (e) {
+        lastErr = e;
+        if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) break;
       }
     }
-    sc.lastVideoTime = -1;
-    sc.stuckChecks = 0;
+    if (gen !== cam.gen || !sc.wantCam) {
+      if (stream) stream.getTracks().forEach(t => t.stop());
+      return;
+    }
+    if (!stream) {
+      const denied = lastErr && lastErr.name === 'NotAllowedError';
+      return showCamError(denied ? 'لم يتم السماح باستخدام الكاميرا. اسمح للموقع بالكاميرا من إعدادات المتصفح ثم أعد المحاولة.' : 'الكاميرا مشغولة أو غير متاحة. أغلق أي تطبيق آخر يستخدم الكاميرا ثم أعد المحاولة.');
+    }
+
+    cam.stream = stream;
+    reader.innerHTML = '<video playsinline muted autoplay></video><div class="scan-frame"></div>';
+    const video = reader.querySelector('video');
+    video.muted = true;
+    video.setAttribute('playsinline', '');
+    video.srcObject = stream;
+    cam.video = video;
+    try { await video.play(); } catch (e) { /* يُعاد المحاولة بالمراقبة */ }
+    const track = stream.getVideoTracks()[0];
+    if (track) track.addEventListener('ended', () => { if (gen === cam.gen && sc.wantCam) restartCamera('track-ended'); });
+
+    await getDetector();
+    if (gen !== cam.gen) return;
+    cam.lastTime = -1;
+    cam.stuck = 0;
+    sc.running = true;
     keepScreenOn();
+    scheduleScan(gen);
+  }
+
+  function scheduleScan(gen) {
+    cam.timer = setTimeout(() => scanFrame(gen), 140);
+  }
+
+  async function scanFrame(gen) {
+    if (gen !== cam.gen || !cam.video) return;
+    const v = cam.video;
+    try {
+      if (!sc.paused && !sc.busy && v.readyState >= 2 && v.videoWidth && document.visibilityState === 'visible') {
+        const text = await decodeFrame(v);
+        if (text && gen === cam.gen) onScan(text);
+      }
+    } catch (e) { /* إطار غير صالح: نكمل */ }
+    if (gen === cam.gen) scheduleScan(gen);
+  }
+
+  async function decodeFrame(v) {
+    if (cam.detector) {
+      try {
+        const codes = await cam.detector.detect(v);
+        return codes && codes[0] ? codes[0].rawValue : null;
+      } catch (e) {
+        cam.detector = null; // بعض الأجهزة يفشل فيها القارئ المدمج: نرجع لـ jsQR
+      }
+    }
+    if (!window.jsQR) return null;
+    const w = v.videoWidth;
+    const h = v.videoHeight;
+    const side = Math.floor(Math.min(w, h) * 0.85);
+    const size = Math.min(520, side);
+    if (!cam.canvas) {
+      cam.canvas = document.createElement('canvas');
+      cam.ctx = cam.canvas.getContext('2d', { willReadFrequently: true });
+    }
+    if (cam.canvas.width !== size) { cam.canvas.width = size; cam.canvas.height = size; }
+    cam.ctx.drawImage(v, (w - side) / 2, (h - side) / 2, side, side, 0, 0, size, size);
+    const img = cam.ctx.getImageData(0, 0, size, size);
+    const res = window.jsQR(img.data, size, size, { inversionAttempts: 'dontInvert' });
+    return res ? res.data : null;
   }
 
   async function stopCamera(opts = {}) {
     if (!opts.restart) {
       sc.wantCam = false;
+      cam.gen++;
       releaseScreen();
     }
-    if (sc.cam) {
-      try { if (sc.running) await sc.cam.stop(); } catch (e) { /* ignore */ }
-      try { sc.cam.clear(); } catch (e) { /* ignore */ }
-    }
-    sc.cam = null;
-    sc.running = false;
+    releaseStream();
   }
 
   async function restartCamera(reason) {
-    if (sc.restarting) return;
+    if (sc.restarting || !sc.wantCam) return;
+    const now = Date.now();
+    cam.restarts = cam.restarts.filter(t => now - t < 60000);
+    if (cam.restarts.length >= 6) {
+      releaseStream();
+      return showCamError('الكاميرا توقفت أكثر من مرة. اضغط إعادة المحاولة، ولو تكرر أعد تحميل الصفحة.');
+    }
+    cam.restarts.push(now);
     sc.restarting = true;
     console.warn('camera restart:', reason);
     try { await startCamera(); } finally { sc.restarting = false; }
   }
 
   function cameraHealthy() {
-    const video = document.querySelector('#reader video');
-    if (!video) return false;
-    const track = video.srcObject && video.srcObject.getVideoTracks ? video.srcObject.getVideoTracks()[0] : null;
-    if (!track || track.readyState === 'ended' || track.muted) return false;
-    if (video.paused || video.readyState < 2) return false;
-    if (video.currentTime === sc.lastVideoTime) {
-      sc.stuckChecks = (sc.stuckChecks || 0) + 1;
-      if (sc.stuckChecks >= 2) return false;
-    } else sc.stuckChecks = 0;
-    sc.lastVideoTime = video.currentTime;
+    const v = cam.video;
+    const track = cam.stream && cam.stream.getVideoTracks()[0];
+    if (!v || !track || track.readyState !== 'live') return false;
+    if (v.paused) { v.play().catch(() => {}); cam.stuck++; return cam.stuck < 2; }
+    if (v.readyState < 2 || v.currentTime === cam.lastTime) { cam.stuck++; return cam.stuck < 3; }
+    cam.stuck = 0;
+    cam.lastTime = v.currentTime;
     return true;
   }
 
   setInterval(() => {
-    if (!sc.wantCam || sc.camError || sc.restarting || sc.paused || currentSection !== 'scanner' || document.visibilityState !== 'visible') return;
-    if (!sc.running || !cameraHealthy()) restartCamera('watchdog');
-  }, 4000);
+    if (!sc.wantCam || sc.camError || sc.restarting || currentSection !== 'scanner' || document.visibilityState !== 'visible') return;
+    if (!cameraHealthy()) restartCamera('watchdog');
+  }, 3000);
 
+  // الخروج من التطبيق/قفل الشاشة: نغلق الكاميرا. الرجوع: نفتحها من جديد (يمنع الشاشة السودا)
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible' || !sc.wantCam || currentSection !== 'scanner') return;
-    keepScreenOn();
-    setTimeout(() => { if (sc.wantCam && !sc.camError && !sc.paused && !cameraHealthy()) restartCamera('resume'); }, 800);
-    if (sc.subject) refreshLectures({ silent: true });
+    if (!sc.wantCam || currentSection !== 'scanner') return;
+    if (document.visibilityState === 'hidden') {
+      cam.gen++;
+      releaseStream();
+    } else {
+      cam.restarts = [];
+      if (!sc.camError) startCamera();
+      keepScreenOn();
+      if (sc.subject) refreshLectures({ silent: true });
+    }
+  });
+
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-cam]');
+    if (!b) return;
+    if (b.dataset.cam === 'restart') { cam.restarts = []; startCamera(); }
+    if (b.dataset.cam === 'flip') { cam.facing = cam.facing === 'environment' ? 'user' : 'environment'; cam.restarts = []; startCamera(); }
   });
 
   function setResult(kind, html) {
@@ -836,10 +948,8 @@
       let res = await api('/api/attendance', { method: 'POST', body: { qrData: text, subjectCode: sc.subject.code } });
       if (res.type === 'confirm_grade') {
         sc.paused = true;
-        try { sc.cam && sc.cam.pause(true); } catch (e) { /* ignore */ }
         feedback(false);
         const c = await Swal.fire({ icon: 'warning', title: 'طالب من فرقة أخرى', text: res.message, showCancelButton: true, confirmButtonText: 'نعم، سجّله', cancelButtonText: 'لا' });
-        try { sc.cam && sc.cam.resume(); } catch (e) { /* ignore */ }
         sc.paused = false;
         if (!c.isConfirmed) {
           setResult('warn', `<div class="who">${esc(res.studentName)}</div><div>لم يتم التسجيل</div>`);
@@ -864,7 +974,8 @@
       }
     } catch (e) {
       feedback(false);
-      setResult('bad', `<div class="fw-800">${esc(e.message)}</div>`);
+      sc.last = ''; // يسمح بإعادة مسح نفس الكارنيه فوراً بعد خطأ اتصال
+      setResult('bad', `<div class="fw-800">${esc(e.message)}</div><div class="small">وجّه الكاميرا للكارنيه مرة أخرى.</div>`);
     } finally {
       setTimeout(() => { sc.busy = false; }, 1200);
     }
@@ -1391,7 +1502,7 @@
   }
 
   window.addEventListener('pagehide', stopCamera);
-  if (location.hostname === 'localhost') window.__socScan = onScan; // للاختبار المحلي فقط
+  if (location.hostname === 'localhost') { window.__socScan = onScan; window.__socCam = cam; } // للاختبار المحلي فقط
   window.addEventListener('hashchange', () => {
     const id = location.hash.replace('#', '');
     if (ME && !ME.mustChangePassword && id !== currentSection) go(id);

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'soc-attendance-v10';
+const CACHE_NAME = 'soc-attendance-v11';
 const STATIC_ASSETS = ['/', '/admin', '/dashboard', '/css/app.css', '/js/common.js', '/js/login.js', '/js/dashboard.js', '/js/register.js', '/manifest.json', '/icons/icon-192.png'];
 
 self.addEventListener('install', event => {

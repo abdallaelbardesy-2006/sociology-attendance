@@ -47,8 +47,10 @@
     .subj-tile:hover { border-color: var(--brand-500); transform: translateY(-1px); box-shadow: var(--shadow-sm); }
     .subj-tile.active { border-color: var(--brand-600); background: var(--brand-50); box-shadow: 0 0 0 3px rgba(59,91,219,.15); }
     .subj-tile .nm { font-weight: 800; font-size: .9rem; margin-top: 6px; }
-    #reader { width: 100%; max-width: 460px; margin: 0 auto; border-radius: 18px; overflow: hidden; background: #0f172a; min-height: 260px; }
-    #reader video { border-radius: 18px; }
+    #reader { position: relative; width: 100%; max-width: 460px; aspect-ratio: 1 / 1; margin: 0 auto; border-radius: 18px; overflow: hidden; background: #0f172a; }
+    #reader .scan-frame { position: absolute; inset: 7.5%; border: 3px solid rgba(255,255,255,.85); border-radius: 18px; box-shadow: 0 0 0 999px rgba(0,0,0,.25); pointer-events: none; }
+    #reader .cam-off { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; color: #cbd5e1; font-weight: 700; padding: 16px; }
+    #reader video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
     .scan-result { border-radius: 18px; padding: 18px; text-align: center; margin-top: 14px; border: 2px solid transparent; transition: .2s; }
     .scan-result .who { font-size: 1.5rem; font-weight: 900; line-height: 1.3; }
     .scan-result.ok { background: var(--ok-bg); border-color: #86efac; color: #14532d; }
@@ -108,7 +110,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.10.5/dist/sweetalert2.all.min.js" integrity="sha384-F8SYeBSrTVPFojwQeAD1UQo0dI5CKJOzc992kU0M/q72tnFcDlxHwbkiw8GLrXd8" crossorigin="anonymous"></script>
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js" integrity="sha384-c9d8RFSL+u3exBOJ4Yp3HUJXS4znl9f+z66d1y54ig+ea249SpqR+w1wyvXz/lk+" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js" integrity="sha384-hStSInNIZ8ljtOVrmrgf7zdHMapaLBWoSnPTtF0nzsybp4+LuhDz6sHuEVpWIX8o" crossorigin="anonymous"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" integrity="sha384-bs/nf9FbdNouRbMiFcrcZfLXYPKiPaGVGplVbv7dLGECccEXDW+S3zjqSKR5ZEaD" crossorigin="anonymous"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU" crossorigin="anonymous"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" integrity="sha384-ZZ1pncU3bQe8y31yfZdMFdSpttDoPmOZg2wguVK9almUodir1PghgT0eY7Mrty8H" crossorigin="anonymous"></script>

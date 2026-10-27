@@ -11,11 +11,18 @@
       opts.headers['Content-Type'] = 'application/json';
       opts.body = JSON.stringify(options.body);
     }
+    // مهلة قصوى للطلب حتى لا تعلق الشاشة لو النت ضعيف
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), options.timeout || 25000) : null;
+    if (ctrl) opts.signal = ctrl.signal;
     let res;
     try {
       res = await fetch(url, opts);
     } catch (e) {
-      throw Object.assign(new Error('تعذر الاتصال بالخادم. تحقق من الإنترنت'), { network: true });
+      const timedOut = e && e.name === 'AbortError';
+      throw Object.assign(new Error(timedOut ? 'الاتصال بطيء جداً ولم يصل رد. حاول مرة أخرى' : 'تعذر الاتصال بالخادم. تحقق من الإنترنت'), { network: true, timeout: timedOut });
+    } finally {
+      if (timer) clearTimeout(timer);
     }
     let data = {};
     try { data = await res.json(); } catch (e) { /* ignore */ }

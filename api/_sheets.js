@@ -51,6 +51,21 @@ function loadCredentials() {
   throw new Error('بيانات Google Service Account غير متوفرة. تأكد من ضبط GOOGLE_PRIVATE_KEY و GOOGLE_SERVICE_ACCOUNT_EMAIL');
 }
 
+// عند ضغط عدة ليدرز في نفس الوقت قد ترد Google بـ 429 (تجاوز الحد بالدقيقة): نعيد المحاولة تلقائياً بتأخير متزايد.
+// الكتابة (POST) تُعاد فقط عند 429/503 لأن الطلب لم يُنفذ، حتى لا يتكرر تسجيل الحضور.
+const SHEETS_RETRY = {
+  retry: 5,
+  retryDelay: 400,
+  shouldRetry: err => {
+    const cfg = (err.config && err.config.retryConfig) || {};
+    if ((cfg.currentRetryAttempt || 0) >= 5) return false;
+    const status = err.response && err.response.status;
+    const method = String((err.config && err.config.method) || 'GET').toUpperCase();
+    if (status === 429 || status === 503) return true;
+    return method === 'GET' && (!status || status >= 500);
+  }
+};
+
 async function getSheetsClient() {
   if (global.__SOC_SHEETS_MOCK__) return { sheets: global.__SOC_SHEETS_MOCK__, spreadsheetId: 'mock' };
   if (!SPREADSHEET_ID) throw new Error('GOOGLE_SHEET_ID غير مضبوط في متغيرات البيئة');
@@ -58,7 +73,7 @@ async function getSheetsClient() {
   const creds = loadCredentials();
   serviceAccountEmail = creds.email;
   const auth = new google.auth.JWT({ email: creds.email, key: creds.key, scopes: SCOPES });
-  clientCache = { sheets: google.sheets({ version: 'v4', auth }), spreadsheetId: SPREADSHEET_ID };
+  clientCache = { sheets: google.sheets({ version: 'v4', auth, retryConfig: SHEETS_RETRY, timeout: 20000 }), spreadsheetId: SPREADSHEET_ID };
   return clientCache;
 }
 
@@ -90,13 +105,22 @@ function colLetter(n) {
 // ==================== التهيئة (مرة واحدة لكل نسخة سيرفر) ====================
 let ensured = false;
 let knownTabs = new Set();
+let sheetIds = {};
+
+function rememberTabs(meta) {
+  knownTabs = new Set();
+  sheetIds = {};
+  (meta.data.sheets || []).forEach(sh => {
+    knownTabs.add(sh.properties.title);
+    sheetIds[sh.properties.title] = sh.properties.sheetId;
+  });
+}
 
 async function ensureSheets() {
   const { sheets, spreadsheetId } = await getSheetsClient();
   if (ensured) return { sheets, spreadsheetId };
   try {
-    const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties.title' });
-    knownTabs = new Set((meta.data.sheets || []).map(s => s.properties.title));
+    rememberTabs(await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties(title,sheetId)' }));
 
     const missing = Object.keys(HEADERS).filter(t => !knownTabs.has(t));
     if (missing.length) {
@@ -104,7 +128,7 @@ async function ensureSheets() {
         spreadsheetId,
         requestBody: { requests: missing.map(title => ({ addSheet: { properties: { title, gridProperties: { frozenRowCount: 1 } } } })) }
       });
-      missing.forEach(t => knownTabs.add(t));
+      rememberTabs(await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties(title,sheetId)' }));
     }
 
     const tabs = Object.keys(HEADERS);
@@ -132,9 +156,8 @@ async function ensureSheets() {
 
 async function ensureSubjectSheet(tabTitle) {
   const { sheets, spreadsheetId } = await ensureSheets();
-  if (knownTabs.has(tabTitle)) return;
-  const meta = await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties.title' });
-  knownTabs = new Set((meta.data.sheets || []).map(s => s.properties.title));
+  if (knownTabs.has(tabTitle) && sheetIds[tabTitle] !== undefined) return;
+  rememberTabs(await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties(title,sheetId)' }));
   if (knownTabs.has(tabTitle)) return;
   await sheets.spreadsheets.batchUpdate({
     spreadsheetId,
@@ -146,7 +169,12 @@ async function ensureSubjectSheet(tabTitle) {
     valueInputOption: 'RAW',
     requestBody: { values: [SUBJECT_HEADER] }
   });
-  knownTabs.add(tabTitle);
+  rememberTabs(await sheets.spreadsheets.get({ spreadsheetId, fields: 'sheets.properties(title,sheetId)' }));
+}
+
+// صف بقيم نصية/رقمية خام (مثل RAW: لا تُفسر كمعادلات)
+function cellsRow(values) {
+  return { values: values.map(v => ({ userEnteredValue: typeof v === 'number' ? { numberValue: v } : { stringValue: String(v == null ? '' : v) } })) };
 }
 
 // ==================== أدوات الوقت (توقيت القاهرة) ====================
@@ -759,10 +787,14 @@ function lectureKey(code, no) {
   return `${String(code).toLowerCase()}#${no}`;
 }
 
-async function readLectureRows() {
+let lecturesCache = { at: 0, map: null };
+
+async function readLectureRows(fresh = false) {
+  if (!fresh && lecturesCache.map && Date.now() - lecturesCache.at < 4000) return lecturesCache.map;
   const { sheets, spreadsheetId } = await ensureSheets();
   const res = await sheets.spreadsheets.values.get({ spreadsheetId, range: 'Lectures!A2:M' });
-  return parseLectureRows(res.data.values || []);
+  lecturesCache = { at: Date.now(), map: parseLectureRows(res.data.values || []) };
+  return lecturesCache.map;
 }
 
 function parseLectureRows(values) {
@@ -825,6 +857,7 @@ async function getLectures(user, code) {
 
 async function writeLecture(subject, l) {
   const { sheets, spreadsheetId } = await ensureSheets();
+  lecturesCache = { at: 0, map: null };
   if (l.row) {
     await sheets.spreadsheets.values.update({
       spreadsheetId, range: `Lectures!A${l.row}:M${l.row}`, valueInputOption: 'RAW', requestBody: { values: [lectureRowValues(subject, l)] }
@@ -838,7 +871,7 @@ async function writeLecture(subject, l) {
 
 async function startLecture(user, code, no, force, ip) {
   const subject = requireScanSubject(user, code);
-  const state = buildLectures(subject, await readLectureRows());
+  const state = buildLectures(subject, await readLectureRows(true));
   if (state.completed) throw new HttpError(400, `تم إنهاء المحاضرات الـ ${MAX_LECTURES} لهذه المادة`);
   const cur = state._list[state.current - 1];
   if (Number(no) !== cur.no) throw new HttpError(400, `المحاضرات بالترتيب: يجب بدء المحاضرة رقم ${cur.no} أولاً`);
@@ -868,7 +901,7 @@ async function countLectureAttendance(subject, no) {
 
 async function finishLecture(user, code, no, ip) {
   const subject = requireScanSubject(user, code);
-  const state = buildLectures(subject, await readLectureRows());
+  const state = buildLectures(subject, await readLectureRows(true));
   const l = state._list[Number(no) - 1];
   if (!l || l.status !== LECTURE_STATUS.open) throw new HttpError(400, 'هذه المحاضرة ليست مفتوحة');
   const now = cairoNow();
@@ -882,7 +915,7 @@ async function finishLecture(user, code, no, ip) {
 // أي حساب مصرح له بالمادة (مشرف/دكتور/ليدر)، بشرط أنها آخر محاضرة منتهية ولم تبدأ التالية
 async function reopenLecture(user, code, no, ip) {
   const subject = requireScanSubject(user, code);
-  const state = buildLectures(subject, await readLectureRows());
+  const state = buildLectures(subject, await readLectureRows(true));
   const l = state._list[Number(no) - 1];
   const next = state._list[Number(no)];
   const today = cairoNow().date;
@@ -973,13 +1006,14 @@ async function recordAttendance(user, payload, ip) {
     }
 
     const status = otherGrade ? STATUS_OTHER_GRADE : STATUS_PRESENT;
-    await sheets.spreadsheets.values.append({
-      spreadsheetId, range: `'${tab}'!A:J`, valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS',
-      requestBody: { values: [[now.stamp, now.date, now.time, student.name, student.code, student.grade, subject.term, status, user.email, lectureNo]] }
-    });
-    await sheets.spreadsheets.values.append({
-      spreadsheetId, range: 'Attendance!A:L', valueInputOption: 'RAW', insertDataOption: 'INSERT_ROWS',
-      requestBody: { values: [[now.stamp, now.date, now.time, student.name, student.code, student.grade, subject.term, subject.code, subject.name, status, user.email, lectureNo]] }
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId,
+      requestBody: {
+        requests: [
+          { appendCells: { sheetId: sheetIds[tab], fields: 'userEnteredValue', rows: [cellsRow([now.stamp, now.date, now.time, student.name, student.code, student.grade, subject.term, status, user.email, lectureNo])] } },
+          { appendCells: { sheetId: sheetIds.Attendance, fields: 'userEnteredValue', rows: [cellsRow([now.stamp, now.date, now.time, student.name, student.code, student.grade, subject.term, subject.code, subject.name, status, user.email, lectureNo])] } }
+        ]
+      }
     });
 
     return {
@@ -1169,7 +1203,7 @@ async function backfillLectures() {
   const summary = { lectureRows: 0, numberedRecords: 0 };
   const tabs = SUBJECTS.filter(s => knownTabs.has(getSubjectSheetName(s.code, s.name)));
   const subjRes = await sheets.spreadsheets.values.batchGet({ spreadsheetId, ranges: tabs.map(s => `'${getSubjectSheetName(s.code, s.name)}'!A2:J`) });
-  const lectureMap = await readLectureRows();
+  const lectureMap = await readLectureRows(true);
   const byDate = {}; // code -> date -> no
   const data = [];
   const historical = {}; // code#no -> {date, codes:Set}
